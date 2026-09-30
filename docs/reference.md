@@ -54,6 +54,14 @@ exits 1 if any failed.
 | `--step-timeout D` | Per-step clock. |
 | `--allow-stale-checkout` | (`deploy`, `destroy`, `refresh`; only the first two are gated.) Proceed although the checkout is dirty, behind its upstream or unverifiable. Each reason is logged at WARN. |
 
+Environment: `CI=true` relaxes the checkout gate without the flag, skipping
+only the upstream comparison (detached HEAD or no upstream) and logging each
+skipped check at WARN; a dirty tree is still refused. A local shell that
+exports `CI=true` bypasses the same checks. See
+[safety](safety.md#the-checkout-gate).
+
+
+
 These are fail-fast: the first failing step stops the run and the error is
 `step <name>: <cause>`.
 
@@ -78,7 +86,7 @@ reported as timed out.
 | `TypedRun`, `TypedProduce`, `TypedConsume`, `TypedTransform`, `Deferred[T]` | Steps whose typed outputs feed later steps and create the DAG edges. |
 | `TopologicalSort`, `ResolveMultiSubgraph`, `ResolveMultiDependents` | DAG operations. |
 | `Run`, `RunWith`, `RunOptions` | Execute a scope. `RunWith` takes the options: `Exclusive`, `All`, `Detail`, `ShowProviders`, `StepTimeout`, `ExpectNoChanges`, `AllowStaleCheckout`. `Run` is `RunWith` with the defaults. |
-| `CheckCheckout` | The checkout gate as a function: returns the reasons a checkout is not safe to apply from. |
+| `CheckCheckout` | The checkout gate as a function: returns the reasons a checkout is not safe to apply from. It is always the strict gate; the `CI=true` relaxation applies only inside `RunWith`. |
 | `BuildPipelineCommands`, `BuildListCommand` | The command tree over a `MultiConfig`. |
 | `DefaultStepTimeout` | 30 minutes. |
 

@@ -121,10 +121,27 @@ func expectNoChanges(step string, result *StepResult) error {
 	return fmt.Errorf("expected no changes but %s reports %s", step, strings.Join(ops, " "))
 }
 
+// ciEnv reports whether the environment says this is a CI run: CI=true, the
+// variable every major CI system exports. A variable so tests need not set the
+// process environment.
+var ciEnv = func() bool { return os.Getenv("CI") == "true" }
+
 // requireFreshCheckout enforces the checkout gate for a mutating action, or,
 // when allow is set, says loudly what it let through.
+//
+// Under CI=true the checks that cannot hold on a runner are skipped, each
+// logged at WARN; a dirty tree is still refused. allow overrides everything,
+// as before.
 func requireFreshCheckout(ctx context.Context, logger *slog.Logger, root string, allow bool) error {
-	problems := CheckCheckout(ctx, root)
+	ci := ciEnv() && !allow
+	problems, skipped := checkCheckout(ctx, root, ci)
+
+	for _, s := range skipped {
+		logger.WarnContext(ctx, "CHECKOUT CHECK SKIPPED (CI=true)", slog.String("skipped", s),
+			slog.String("reason", "CI=true: a CI runner checks out a detached HEAD, which has no upstream to compare with"),
+		)
+	}
+
 	if len(problems) == 0 {
 		return nil
 	}
@@ -139,9 +156,13 @@ func requireFreshCheckout(ctx context.Context, logger *slog.Logger, root string,
 		return nil
 	}
 
-	return fmt.Errorf("refusing to change infrastructure from this checkout:\n  - %s\n"+
-		"fix the checkout, or override with --allow-stale-checkout if you mean it",
-		strings.Join(problems, "\n  - "))
+	hint := "fix the checkout, or override with --allow-stale-checkout if you mean it"
+	if ci {
+		hint = "CI=true relaxes only the upstream comparison; a dirty tree is still refused"
+	}
+
+	return fmt.Errorf("refusing to change infrastructure from this checkout:\n  - %s\n%s",
+		strings.Join(problems, "\n  - "), hint)
 }
 
 // CheckCheckout reports why the checkout at root is not safe to apply from: a
@@ -153,10 +174,22 @@ func requireFreshCheckout(ctx context.Context, logger *slog.Logger, root string,
 // remote-tracking ref is exactly the mistake being guarded: the tree looks
 // current until someone asks the remote.
 func CheckCheckout(ctx context.Context, root string) []string {
-	var problems []string
+	problems, _ := checkCheckout(ctx, root, false)
+
+	return problems
+}
+
+// checkCheckout is CheckCheckout with the CI relaxation. With ci set, a
+// checkout that has no upstream to compare with (a detached HEAD, which is how
+// a CI runner checks out; or an unpublished branch) is not a problem: the
+// upstream comparison is skipped and named in skipped instead. A dirty tree,
+// and anything that is not a git checkout, are refused either way. A branch
+// that does have an upstream is still compared, fetch and all: that check
+// holds in CI too.
+func checkCheckout(ctx context.Context, root string, ci bool) (problems, skipped []string) {
 
 	if _, err := git(ctx, root, "rev-parse", "--git-dir"); err != nil {
-		return []string{"not a git checkout, so it cannot be proven current"}
+		return []string{"not a git checkout, so it cannot be proven current"}, nil
 	}
 
 	if out, err := git(ctx, root, "status", "--porcelain", "--", "."); err != nil {
@@ -167,20 +200,24 @@ func CheckCheckout(ctx context.Context, root string) []string {
 	}
 
 	upstream, err := git(ctx, root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+	if err != nil && ci {
+		return problems, []string{"upstream comparison (detached HEAD or no upstream branch; dirty-tree check still applied)"}
+	}
+
 	if err != nil {
-		return append(problems, "no upstream branch is configured (detached HEAD or an unpublished branch), so it cannot be compared")
+		return append(problems, "no upstream branch is configured (detached HEAD or an unpublished branch), so it cannot be compared"), nil
 	}
 
 	upstream = strings.TrimSpace(upstream)
 
 	branch, err := git(ctx, root, "symbolic-ref", "--short", "HEAD")
 	if err != nil {
-		return append(problems, "HEAD is detached, so it cannot be compared with an upstream")
+		return append(problems, "HEAD is detached, so it cannot be compared with an upstream"), nil
 	}
 
 	remote, err := git(ctx, root, "config", "--get", "branch."+strings.TrimSpace(branch)+".remote")
 	if err != nil {
-		return append(problems, "the branch names no remote to fetch")
+		return append(problems, "the branch names no remote to fetch"), nil
 	}
 
 	remote = strings.TrimSpace(remote)
@@ -189,29 +226,29 @@ func CheckCheckout(ctx context.Context, root string) []string {
 	defer cancel()
 
 	if _, err := git(fetchCtx, root, "fetch", "--quiet", remote); err != nil {
-		return append(problems, fmt.Sprintf("fetching %s failed, so currency cannot be proven: %v", remote, err))
+		return append(problems, fmt.Sprintf("fetching %s failed, so currency cannot be proven: %v", remote, err)), nil
 	}
 
 	counts, err := git(ctx, root, "rev-list", "--left-right", "--count", "HEAD...@{u}")
 	if err != nil {
-		return append(problems, fmt.Sprintf("cannot compare with %s: %v", upstream, err))
+		return append(problems, fmt.Sprintf("cannot compare with %s: %v", upstream, err)), nil
 	}
 
 	fields := strings.Fields(counts)
 	if len(fields) != 2 {
-		return append(problems, fmt.Sprintf("cannot parse the comparison with %s: %q", upstream, counts))
+		return append(problems, fmt.Sprintf("cannot parse the comparison with %s: %q", upstream, counts)), nil
 	}
 
 	behind, err := strconv.Atoi(fields[1])
 	if err != nil {
-		return append(problems, fmt.Sprintf("cannot parse the comparison with %s: %q", upstream, counts))
+		return append(problems, fmt.Sprintf("cannot parse the comparison with %s: %q", upstream, counts)), nil
 	}
 
 	if behind > 0 {
 		problems = append(problems, fmt.Sprintf("the branch is %d commit(s) behind %s", behind, upstream))
 	}
 
-	return problems
+	return problems, nil
 }
 
 // git runs one git command in dir and returns its stdout. Prompts are off: a

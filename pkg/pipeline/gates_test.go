@@ -292,3 +292,108 @@ func TestRunOptions_DefaultTimeout(t *testing.T) {
 	assert.Equal(t, time.Second, RunOptions{StepTimeout: time.Second}.stepTimeout())
 	assert.Negative(t, RunOptions{StepTimeout: -1}.stepTimeout())
 }
+
+func withCI(t *testing.T, on bool) {
+	t.Helper()
+
+	prev := ciEnv
+	ciEnv = func() bool { return on }
+
+	t.Cleanup(func() { ciEnv = prev })
+}
+
+// detach leaves the checkout on a detached HEAD, as a CI runner does.
+func detach(t *testing.T, work string) {
+	t.Helper()
+	require.NoError(t, runGit(work, "checkout", "--detach", "HEAD"))
+}
+
+func TestRunWith_DetachedHeadRefusedOutsideCI(t *testing.T) {
+	withCI(t, false)
+
+	work, _ := fixture(t)
+	detach(t, work)
+
+	var ran []string
+
+	err := RunWith(context.Background(), quiet(), gateConfig(work, &ran), ActionExecute, nil, RunOptions{All: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no upstream")
+	assert.Empty(t, ran)
+}
+
+func TestRunWith_CIProceedsFromDetachedHeadAndWarns(t *testing.T) {
+	withCI(t, true)
+
+	work, _ := fixture(t)
+	detach(t, work)
+
+	var (
+		ran []string
+		log strings.Builder
+	)
+
+	logger := slog.New(slog.NewTextHandler(&log, nil))
+
+	for _, action := range []Action{ActionExecute, ActionDestroy} {
+		require.NoError(t, RunWith(context.Background(), logger, gateConfig(work, &ran), action, nil, RunOptions{All: true}))
+	}
+
+	assert.Len(t, ran, 2)
+	assert.Contains(t, log.String(), "level=WARN")
+	assert.Contains(t, log.String(), "CHECKOUT CHECK SKIPPED (CI=true)")
+	assert.Contains(t, log.String(), "upstream comparison")
+}
+
+func TestRunWith_CIStillRefusesDirtyTree(t *testing.T) {
+	withCI(t, true)
+
+	work, _ := fixture(t)
+	detach(t, work)
+	require.NoError(t, os.WriteFile(filepath.Join(work, "dirty.txt"), []byte("x"), 0o644))
+
+	var ran []string
+
+	err := RunWith(context.Background(), quiet(), gateConfig(work, &ran), ActionExecute, nil, RunOptions{All: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "dirty")
+	assert.NotContains(t, err.Error(), "no upstream")
+	assert.Empty(t, ran)
+}
+
+func TestRunWith_CIStillComparesABranchWithAnUpstream(t *testing.T) {
+	withCI(t, true)
+
+	work, remote := fixture(t)
+
+	other := filepath.Join(t.TempDir(), "other")
+	require.NoError(t, runGit(filepath.Dir(other), "clone", remote, other))
+	require.NoError(t, os.WriteFile(filepath.Join(other, "new.txt"), []byte("y"), 0o644))
+	require.NoError(t, runGit(other, "add", "."))
+	require.NoError(t, runGit(other, "commit", "-m", "advance"))
+	require.NoError(t, runGit(other, "push", "origin", "master"))
+
+	var ran []string
+
+	err := RunWith(context.Background(), quiet(), gateConfig(work, &ran), ActionExecute, nil, RunOptions{All: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "behind origin/master")
+	assert.Empty(t, ran)
+}
+
+func TestRunWith_CINotAGitCheckoutStillRefused(t *testing.T) {
+	withCI(t, true)
+
+	var ran []string
+
+	err := RunWith(context.Background(), quiet(), gateConfig(t.TempDir(), &ran), ActionExecute, nil, RunOptions{All: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a git checkout")
+}
+
+func TestCIEnv_OnlyLiteralTrue(t *testing.T) {
+	for val, want := range map[string]bool{"true": true, "1": false, "false": false, "": false, "TRUE": false} {
+		t.Setenv("CI", val)
+		assert.Equal(t, want, ciEnv(), "CI=%q", val)
+	}
+}

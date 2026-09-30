@@ -57,6 +57,10 @@ in the rest.
   the resource (see [reference](reference.md#diff)).
 - Leave `--step-timeout` at its default until you have measured your slowest
   stack, then set it to a comfortable multiple.
+- In CI, rely on `CI=true` (set by your CI system) rather than
+  `--allow-stale-checkout`: it skips only the upstream comparison a detached
+  HEAD cannot satisfy and still refuses a dirty tree. Never export `CI=true`
+  in a developer shell.
 - Do not script `--allow-stale-checkout`. It exists for the person who has
   read the refusal and means it.
 
