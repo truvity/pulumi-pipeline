@@ -48,7 +48,10 @@ adding a stack file is enough.
 A **gate** is a refusal the runner applies around your steps: on the
 checkout before a mutating run, on each step's clock, on a preview's
 result, and on the refresh-preview after an apply. Gates are on by default;
-the ones that can be overridden say so and log loudly when they are.
+the ones that can be overridden say so and log loudly when they are. The
+checkout gate relaxes on its own under `CI=true` (a runner's detached HEAD
+has no upstream) but still refuses a dirty tree; a local shell exporting
+`CI=true` bypasses the same checks ([safety](docs/safety.md#the-checkout-gate)).
 
 Steps that carry no edges run in name order; steps that do run in
 topological order (reverse for `destroy`). A dry run continues past a

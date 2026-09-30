@@ -1,8 +1,21 @@
 # Changelog
 
 The first release is v0.1.0 (its heading carries no date until the tag is cut).
+Each hand-cut tag gets one heading.
 Entries are written for someone deciding whether to bump: what changed for
 them, and for anything breaking, what to do.
+
+## v0.2.0
+
+- Gate: under `CI=true` the checkout gate skips the upstream comparison
+  (a runner's detached HEAD has none) instead of refusing, logging each
+  skipped check at WARN. A dirty tree, a non-git directory and a branch
+  that has an upstream are refused or compared exactly as before, and
+  `--allow-stale-checkout` still overrides everything. Nothing to do on a
+  runner that exports `CI=true`, which now deploys from a detached HEAD
+  without the flag; if you had scripted the flag in CI, you can drop it.
+  Caveat: a local shell that exports `CI=true` bypasses the same checks.
+  See `docs/decisions/0003-ci-relaxes-the-checkout-gate.md`.
 
 ## v0.1.0
 

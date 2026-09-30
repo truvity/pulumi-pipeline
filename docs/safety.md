@@ -25,6 +25,21 @@ upstream is allowed — unpushed work is the ordinary state of a change being
 tested — and is not reported. `diff` and `refresh` are not gated: they show
 or reconcile state and do not put a program's reading of the world into it.
 
+**In CI.** With `CI=true` in the environment (the literal string `true`;
+every major CI system exports it) the gate skips the checks that cannot hold
+on a runner: a detached HEAD, which is how a runner checks out, has no
+upstream, so there is nothing to be "behind". Each skipped check is logged at
+WARN as `CHECKOUT CHECK SKIPPED (CI=true)`. Everything that still holds is
+still enforced: a dirty tree is refused, a checkout that is not a git
+checkout is refused, and a branch that *does* have an upstream (a runner that
+checks a branch out) is still fetched and compared. The runner's own
+pipeline is what proves a detached commit is the intended one.
+
+*Caveat.* The relaxation is triggered by an environment variable, not by
+proof that the process is on a runner: a local shell that exports `CI=true`
+bypasses the same upstream checks. Do not export it in a developer shell or a
+profile. A dirty tree is refused either way.
+
 **Past it.** `--allow-stale-checkout`. Every reason it overrides is logged at
 WARN as `PROCEEDING FROM A CHECKOUT THAT IS NOT PROVEN CURRENT`. It is a flag
 for a person, not for a script.
