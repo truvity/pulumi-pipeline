@@ -133,7 +133,7 @@ func GraphCommand(cfg Config, outputPath string) error {
 		return nil
 	}
 
-	tmpFile, err := os.CreateTemp("", "nexus-graph-*.html")
+	tmpFile, err := os.CreateTemp("", "pulumi-pipeline-graph-*.html")
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}
