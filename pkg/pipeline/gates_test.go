@@ -103,6 +103,8 @@ func gateConfig(root string, ran *[]string) Config {
 }
 
 func TestRunWith_DeployRefusesDirtyCheckout(t *testing.T) {
+	withCI(t, false)
+
 	work, _ := fixture(t)
 	require.NoError(t, os.WriteFile(filepath.Join(work, "dirty.txt"), []byte("x"), 0o644))
 
@@ -119,6 +121,8 @@ func TestRunWith_DeployRefusesDirtyCheckout(t *testing.T) {
 }
 
 func TestRunWith_OverrideProceedsAndWarns(t *testing.T) {
+	withCI(t, false)
+
 	work, _ := fixture(t)
 	require.NoError(t, os.WriteFile(filepath.Join(work, "dirty.txt"), []byte("x"), 0o644))
 
@@ -138,6 +142,8 @@ func TestRunWith_OverrideProceedsAndWarns(t *testing.T) {
 }
 
 func TestRunWith_DryRunAndRefreshAreNotGated(t *testing.T) {
+	withCI(t, false)
+
 	work, _ := fixture(t)
 	require.NoError(t, os.WriteFile(filepath.Join(work, "dirty.txt"), []byte("x"), 0o644))
 

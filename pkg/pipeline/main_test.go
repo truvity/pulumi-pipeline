@@ -15,7 +15,16 @@ import (
 // reliably clean nor guaranteed an upstream, so each run gets a fixture that
 // is. The gate's own tests build their own fixtures and never rely on this
 // one.
+//
+// It also clears CI: GitHub Actions and most runners export CI=true, which
+// relaxes the gate, so a test's result would depend on where it runs. A test
+// that wants the relaxed mode asks for it with withCI.
 func TestMain(m *testing.M) {
+	if err := os.Unsetenv("CI"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
 	dir, err := os.MkdirTemp("", "pipeline-test-")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
