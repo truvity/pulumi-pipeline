@@ -1,0 +1,46 @@
+# Tag-triggered release through truvity/ci-workflows release-public.yaml.
+#
+# One tag stamps everything: the Go module (a module needs no build step; the
+# tag is its version) and the pulumi-pipeline binaries built here. The binary
+# is run by a person or a CI job against a checkout, so it is an archive, not
+# an image: a container would add a credential hand-off and nothing else.
+version: 2
+
+project_name: pulumi-pipeline
+
+builds:
+  - id: pulumi-pipeline
+    main: ./cmd/pulumi-pipeline
+    binary: pulumi-pipeline
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+
+archives:
+  - id: pulumi-pipeline
+    ids: [pulumi-pipeline]
+    formats: [tar.gz]
+    name_template: "pulumi-pipeline_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^chore"
+      - "^ci"
+      - "^docs"
+      - "^test"
+
+release:
+  github: {}
+  header: |
+    ## pulumi-pipeline {{ .Tag }}
+
+    Go module: `go get github.com/truvity/pulumi-pipeline@{{ .Tag }}`.
+    CLI: the `pulumi-pipeline` archives below, or
+    `go run github.com/truvity/pulumi-pipeline/cmd/pulumi-pipeline@{{ .Tag }} --help`.
