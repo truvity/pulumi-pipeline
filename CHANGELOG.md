@@ -5,6 +5,15 @@ Each hand-cut tag gets one heading.
 Entries are written for someone deciding whether to bump: what changed for
 them, and for anything breaking, what to do.
 
+## v0.5.0
+
+- `pkg/urngolden`: `Layout`, the check of a stack restructure: every target
+  stack's registrations pinned to a golden, the target stacks held to register
+  exactly what the legacy stacks they replace did (a pure re-partition: nothing
+  created, nothing deleted), and the `pulumi state move` list generated from
+  the same runs. `Layout.Note`, `Layout.Extra` and `Layout.State` carry the
+  header note and the mock hooks. `URNsOf` returns a golden's URNs. Additive.
+
 ## v0.4.0
 
 - `pkg/gensync`: `Hooks.PathOf` and `SyncOptions.PathOf` re-point a stack to
