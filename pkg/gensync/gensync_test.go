@@ -109,3 +109,50 @@ func TestSyncReadsStackOutput(t *testing.T) {
 		t.Fatalf("saved = %v", got)
 	}
 }
+
+func TestPathOfRepointsAndEmptyMeansNone(t *testing.T) {
+	root := t.TempDir()
+	got := map[string]map[string]any{}
+	pathOf := func(scope, stack string) string {
+		switch stack {
+		case "old":
+			return "gen/" + scope + "/legacy.yaml"
+		case "none":
+			return ""
+		}
+
+		return gensync.Path(scope, stack)
+	}
+	hooks := gensync.Hooks{ConfigDir: "conf", Save: recorder(&got), PathOf: pathOf}
+
+	file := filepath.Join(root, "conf", "gen", "s", "legacy.yaml")
+	if err := os.MkdirAll(filepath.Dir(file), 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(file, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fn := hooks.OutputsFor(root, "s", "old")
+	if fn == nil {
+		t.Fatal("a re-pointed stack with its file must be synced")
+	}
+
+	if err := fn(t.Context(), slog.New(slog.DiscardHandler), map[string]any{"a": 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := got["gen/s/legacy.yaml"]; !ok {
+		t.Fatalf("not saved at the re-pointed path: %v", got)
+	}
+
+	if hooks.OutputsFor(root, "s", "none") != nil {
+		t.Fatal("a stack with no file must not be synced")
+	}
+
+	err := gensync.WriteAt(t.Context(), slog.New(slog.DiscardHandler), recorder(&got), pathOf, "s", "none", map[string]any{"a": 1})
+	if err == nil {
+		t.Fatal("writing a stack that has no file must fail")
+	}
+}
