@@ -7,6 +7,9 @@ them, and for anything breaking, what to do.
 
 ## v0.3.0
 
+- `pkg/gitutils`: small git helpers (repository root with the `GIT_DIR`
+  hook trap handled, branch, tag, commit, dirty checks) with a typed
+  `ErrNotInRepo`. Additive.
 - `pkg/yamlutils`: deterministic YAML with sorted keys and atomic file writes,
   moved out of the consuming estate. Additive.
 
