@@ -10,6 +10,16 @@ them, and for anything breaking, what to do.
 - `pkg/yamlutils`: deterministic YAML with sorted keys and atomic file writes,
   moved out of the consuming estate. Additive.
 
+## v0.3.0
+
+- `pkg/urngolden`: pin the Pulumi resource names (URNs), parents, options
+  and aliases a program registers under Pulumi mocks, with an
+  `UPDATE_GOLDEN=1` rewrite and a diff that names every added, removed and
+  changed resource. Also `RunProps`/`AssertProps`, `RunMoves`/`LegacyURNs`
+  for alias checks, and `FakeAWS` (an offline AWS endpoint that answers
+  "nothing exists yet"). The Pulumi project name is a parameter of every
+  run. Additive.
+
 ## v0.2.0
 
 - Gate: under `CI=true` the checkout gate skips the upstream comparison
