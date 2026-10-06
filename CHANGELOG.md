@@ -5,6 +5,13 @@ Each hand-cut tag gets one heading.
 Entries are written for someone deciding whether to bump: what changed for
 them, and for anything breaking, what to do.
 
+## v0.4.0
+
+- `pkg/gensync`: `Hooks.PathOf` and `SyncOptions.PathOf` re-point a stack to
+  the gen file that holds its outputs (or to none), for a consumer whose
+  file keeps a legacy name; `WriteAt` is `Write` with that mapping. Nil keeps
+  the v0.3.0 behaviour. Additive.
+
 ## v0.3.0
 
 - `pkg/gitutils`: small git helpers (repository root with the `GIT_DIR`

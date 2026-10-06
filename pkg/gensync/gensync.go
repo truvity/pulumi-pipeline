@@ -37,6 +37,10 @@ type (
 	// already filtered out by the caller.
 	Saver func(ctx context.Context, logger *slog.Logger, path string, outputs map[string]any) error
 
+	// PathFunc maps a stack to the config-relative path of its gen file, or
+	// "" when the stack has none. Nil means Path.
+	PathFunc func(scope, stack string) string
+
 	// Hooks implements pulumistep.OutputHooks: a stack's outputs are written
 	// when, and only when, its gen file already exists.
 	Hooks struct {
@@ -45,6 +49,9 @@ type (
 		ConfigDir string
 		// Save writes one file.
 		Save Saver
+		// PathOf re-points a stack to the file that holds its outputs, for a
+		// stack whose file keeps a legacy name. Nil means Path.
+		PathOf PathFunc
 	}
 
 	// SyncOptions is the input of Sync.
@@ -56,6 +63,8 @@ type (
 		ScopesDir string
 		// Save writes the file.
 		Save Saver
+		// PathOf is Hooks.PathOf.
+		PathOf PathFunc
 	}
 )
 
@@ -75,12 +84,26 @@ func ValidateNames(segments ...string) error {
 	return nil
 }
 
-// Write persists a stack's outputs through save.
+func (f PathFunc) of(scope, stack string) string {
+	if f == nil {
+		return Path(scope, stack)
+	}
+
+	return f(scope, stack)
+}
+
+// Write persists a stack's outputs through save, at Path(scope, stack).
 //
 // Secrets must already have been filtered by the caller: pulumistep's
 // OutputsToMap does this, which is why a credential cannot reach a committed
 // file by anyone forgetting to think about it.
 func Write(ctx context.Context, logger *slog.Logger, save Saver, scope, stack string, outputs map[string]any) error {
+	return WriteAt(ctx, logger, save, nil, scope, stack, outputs)
+}
+
+// WriteAt is Write with a path mapping (nil means Path). A stack the mapping
+// gives no file is an error: it has nowhere to write.
+func WriteAt(ctx context.Context, logger *slog.Logger, save Saver, pathOf PathFunc, scope, stack string, outputs map[string]any) error {
 	if err := ValidateNames(scope, stack); err != nil {
 		return err
 	}
@@ -89,7 +112,11 @@ func Write(ctx context.Context, logger *slog.Logger, save Saver, scope, stack st
 		return fmt.Errorf("stack %s/%s has no outputs", scope, stack)
 	}
 
-	path := Path(scope, stack)
+	path := pathOf.of(scope, stack)
+	if path == "" {
+		return fmt.Errorf("stack %s/%s writes no gen file", scope, stack)
+	}
+
 	if err := save(ctx, logger, path, outputs); err != nil {
 		return fmt.Errorf("save %s: %w", path, err)
 	}
@@ -111,12 +138,17 @@ func Write(ctx context.Context, logger *slog.Logger, save Saver, scope, stack st
 // enrolment an explicit act (create the gen file once, or run Sync) while an
 // unenrolled stack behaves exactly as before.
 func (h Hooks) OutputsFor(repoRoot, scope, stack string) pulumistep.OutputFunc {
-	if _, err := os.Stat(filepath.Join(repoRoot, h.ConfigDir, Path(scope, stack))); err != nil {
+	path := h.PathOf.of(scope, stack)
+	if path == "" {
+		return nil
+	}
+
+	if _, err := os.Stat(filepath.Join(repoRoot, h.ConfigDir, path)); err != nil {
 		return nil
 	}
 
 	return func(ctx context.Context, logger *slog.Logger, outputs map[string]any) error {
-		return Write(ctx, logger, h.Save, scope, stack, outputs)
+		return WriteAt(ctx, logger, h.Save, h.PathOf, scope, stack, outputs)
 	}
 }
 
@@ -145,5 +177,5 @@ func Sync(ctx context.Context, logger *slog.Logger, opts SyncOptions, scope, sta
 		return fmt.Errorf("parse outputs: %w", err)
 	}
 
-	return Write(ctx, logger, opts.Save, scope, stack, outputs)
+	return WriteAt(ctx, logger, opts.Save, opts.PathOf, scope, stack, outputs)
 }
