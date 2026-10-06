@@ -5,6 +5,21 @@ Each hand-cut tag gets one heading.
 Entries are written for someone deciding whether to bump: what changed for
 them, and for anything breaking, what to do.
 
+## v0.6.0
+
+- `pkg/genfiles` (new): the write side of a repository's generated files.
+  `Diff` and `Apply` reconcile a desired file set against disk and remove the
+  stale files an `Owner` owns; `Write`, `Remove`, `EnsureStamp`, `Stamp` and the
+  typed `Parse`, `Marshal` and `Canonical` persist one generated config file
+  with its provenance stamp. All writes are atomic and skip identical content.
+  Additive.
+- `pkg/gitutils`: `GitRoot` now drops every `GIT_*` variable a git hook
+  exports (not only `GIT_DIR`), keeping `GIT_CEILING_DIRECTORIES`; before, a
+  hook that set `GIT_WORK_TREE` or `GIT_INDEX_FILE` could still misplace the
+  root. `RootResolver` caches the root for a process that asks often. Callers
+  that relied on another `GIT_*` variable steering `GitRoot` must pass the
+  directory instead.
+
 ## v0.5.0
 
 - `pkg/urngolden`: `Layout`, the check of a stack restructure: every target
