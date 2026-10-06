@@ -12,6 +12,14 @@ them, and for anything breaking, what to do.
   `ErrNotInRepo`. Additive.
 - `pkg/yamlutils`: deterministic YAML with sorted keys and atomic file writes,
   moved out of the consuming estate. Additive.
+- `pkg/urngolden`: pin the Pulumi resource names (URNs), parents, options
+  and aliases a program registers under Pulumi mocks, with an
+  `UPDATE_GOLDEN=1` rewrite and a diff that names every added, removed and
+  changed resource. Also `RunProps`/`AssertProps`, `RunMoves`/`LegacyURNs`
+  for alias checks, hooks (`Recorder.Extra`, `Recorder.State`) for the reads and
+  created-resource outputs a program needs answered, and `FakeAWS` (an offline AWS endpoint that answers
+  "nothing exists yet"). The Pulumi project name is a parameter of every
+  run. Additive.
 
 ## v0.2.0
 
