@@ -5,6 +5,11 @@ Each hand-cut tag gets one heading.
 Entries are written for someone deciding whether to bump: what changed for
 them, and for anything breaking, what to do.
 
+## v0.3.0
+
+- `pkg/yamlutils`: deterministic YAML with sorted keys and atomic file writes,
+  moved out of the consuming estate. Additive.
+
 ## v0.2.0
 
 - Gate: under `CI=true` the checkout gate skips the upstream comparison
