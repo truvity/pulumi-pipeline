@@ -20,6 +20,12 @@ them, and for anything breaking, what to do.
   created-resource outputs a program needs answered, and `FakeAWS` (an offline AWS endpoint that answers
   "nothing exists yet"). The Pulumi project name is a parameter of every
   run. Additive.
+- `pkg/gensync`: write a deployed stack's non-secret outputs into a committed
+  `gen/{scope}/{stack}.yaml` under the consumer's config directory. `Hooks`
+  plugs into `pulumicli.Options` (a stack is synced only once its file
+  exists); `Sync` reads outputs back with `pulumi stack output` for a stack
+  deployed earlier. The consumer supplies the `Saver` that owns the file's
+  shape and header. Additive.
 
 ## v0.2.0
 
