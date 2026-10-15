@@ -5,6 +5,21 @@ Each hand-cut tag gets one heading.
 Entries are written for someone deciding whether to bump: what changed for
 them, and for anything breaking, what to do.
 
+## v0.7.0
+
+- `pkg/genfiles`: `Store`, the generated-file tree as a process sees it: an
+  embedded copy behind an in-memory overlay that every write refreshes, so a
+  later read in the same process sees fresh data. `NewStore`, `FS`, `Write`
+  (always stamped, atomic, a no-op on identical content), `WriteYAML`,
+  `WriteYAMLBy`, `Delete`, `Exists`, `Generation`, the disk-root setters, and
+  the typed `Load`, `LoadFrom`, `Save` and `SaveFromMap`. Additive.
+- `pkg/yamldoc` (new): the reflection-based commented-YAML encoder for
+  generated values files. A `Doc` is a sequence of commented sections, each a
+  struct or map; `yaml` and `style` (`quoted`, `quotekeys`, `literal`) tags,
+  `KeyCommenter` and `ItemCommenter` for comments above keys and items,
+  `Noder` for a type that builds its own node, `Passthrough` and `Keyed`.
+  Output is deterministic (maps in sorted key order). Additive.
+
 ## v0.6.0
 
 - `pkg/genfiles` (new): the write side of a repository's generated files.
