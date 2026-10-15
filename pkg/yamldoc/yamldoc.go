@@ -162,6 +162,7 @@ func Keyed(key string, value any) Noder {
 	return keyedValue{key: key, value: value}
 }
 
+// YAMLNode builds the one-key mapping.
 func (k keyedValue) YAMLNode() (*yaml.Node, error) {
 	value, err := encodeNode(reflect.ValueOf(k.value), fieldOptions{})
 	if err != nil {
@@ -181,6 +182,7 @@ func Text(write func(sb *strings.Builder)) Noder {
 	return yamlTextValue(sb.String())
 }
 
+// YAMLNode parses the text.
 func (t yamlTextValue) YAMLNode() (*yaml.Node, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte(t), &doc); err != nil {
@@ -194,6 +196,7 @@ func (t yamlTextValue) YAMLNode() (*yaml.Node, error) {
 	return doc.Content[0], nil
 }
 
+// YAMLNode encodes the wrapped value the way yaml.Marshal would.
 func (p Passthrough) YAMLNode() (*yaml.Node, error) {
 	var n yaml.Node
 	if err := n.Encode(p.Value); err != nil {
