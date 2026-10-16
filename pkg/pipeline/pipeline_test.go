@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
 
 	"github.com/truvity/pulumi-pipeline/pkg/pipeline"
@@ -55,14 +54,6 @@ func TestProperty5_ActionSetMembershipRoundTrip(t *testing.T) {
 			}
 		}
 	})
-}
-
-// Property 20: Backward compatibility aliases.
-// ActionPreview == ActionDryRun, ActionUp == ActionExecute, ActionRefresh == ActionSync.
-func TestProperty20_BackwardCompatibilityAliases(t *testing.T) {
-	require.Equal(t, pipeline.ActionDryRun, pipeline.ActionPreview, "ActionPreview must equal ActionDryRun")
-	require.Equal(t, pipeline.ActionExecute, pipeline.ActionUp, "ActionUp must equal ActionExecute")
-	require.Equal(t, pipeline.ActionSync, pipeline.ActionRefresh, "ActionRefresh must equal ActionSync")
 }
 
 // Unit tests for Action.String().

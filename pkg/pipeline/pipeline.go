@@ -100,15 +100,6 @@ const (
 )
 
 const (
-	// ActionPreview is a backward-compatible alias for ActionDryRun.
-	ActionPreview = ActionDryRun
-	// ActionUp is a backward-compatible alias for ActionExecute.
-	ActionUp = ActionExecute
-	// ActionRefresh is a backward-compatible alias for ActionSync.
-	ActionRefresh = ActionSync
-)
-
-const (
 	// StepPulumi is a Pulumi stack operation.
 	StepPulumi StepKind = iota
 	// StepExec is a Go function (universal escape hatch).
