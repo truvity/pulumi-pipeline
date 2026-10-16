@@ -5,6 +5,13 @@ Each hand-cut tag gets one heading.
 Entries are written for someone deciding whether to bump: what changed for
 them, and for anything breaking, what to do.
 
+## Unreleased
+
+- **Breaking: `pkg/pipeline` drops the `ActionPreview`, `ActionUp` and
+  `ActionRefresh` aliases.** Use `ActionDryRun`, `ActionExecute` and
+  `ActionSync`, which they equalled. No caller in the truvity, trust-form or
+  finttech organisations uses the old names.
+
 ## v0.7.0
 
 - `pkg/genfiles`: `Store`, the generated-file tree as a process sees it: an
