@@ -19,7 +19,7 @@ test:
 # keys silently.
 lint:
     golangci-lint config verify
-    golangci-lint run ./...
+    GOTOOLCHAIN=local golangci-lint run ./...
 
 # Reachable Go advisories (security.yaml, daily). NOT part of `check`: a
 # standard-library advisory with no released fix would turn every pull

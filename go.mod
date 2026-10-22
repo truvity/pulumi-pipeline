@@ -2,7 +2,7 @@ module github.com/truvity/pulumi-pipeline
 
 go 1.27.0
 
-toolchain go1.27.2
+toolchain go1.27.3
 
 require (
 	github.com/mattn/go-isatty v0.0.24
