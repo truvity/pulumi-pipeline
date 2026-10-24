@@ -102,7 +102,7 @@ func AWSCall(extra func(args pulumi.MockCallArgs) (resource.PropertyMap, bool)) 
 			out["identityStoreIds"] = resource.NewProperty([]resource.PropertyValue{resource.NewProperty("d-0000000000")})
 			out["id"] = resource.NewProperty("instances")
 		case "aws:identitystore/getGroup:getGroup":
-			out["groupId"] = resource.NewProperty("00000000-0000-0000-0000-000000000000")
+			out["groupId"] = resource.NewProperty("00000000-0000-0000-0000-00000000000a")
 			out["id"] = resource.NewProperty("group")
 		case "aws:ec2/getAmi:getAmi":
 			out["id"] = resource.NewProperty("ami-0123456789abcdef0")
