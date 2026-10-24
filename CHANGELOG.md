@@ -5,6 +5,16 @@ Each hand-cut tag gets one heading.
 Entries are written for someone deciding whether to bump: what changed for
 them, and for anything breaking, what to do.
 
+## Unreleased
+
+- `pkg/urngolden`: `Stacks`, the check of a scope's stacks: each stack's
+  dispatch pinned to `<Dir>/urns-<stack>.yaml` (`Project`, `Names`, `Target`,
+  `Dir`, `Extra`, and `Run` to swap the runner). `AWSState` and `AWSCall` are
+  the mock answers an AWS program reads back (cluster endpoint and identity,
+  key, role, table and bucket ARNs, the VPC IPv6 prefix, organization, SSO
+  instance, subnets, AMI, policy document); `Stacks` uses them by default and
+  they wrap into your own hooks. Additive.
+
 ## v0.8.0
 
 - **Breaking: `pkg/pipeline` drops the `ActionPreview`, `ActionUp` and
