@@ -15,6 +15,7 @@ change into a failure on demand, and that put a clock on every step.
 | `pkg/pipeline` — the engine: steps, DAG, typed steps, run, gates, CLI commands | Go package, no Pulumi dependency |
 | `pkg/pulumistep` — the Automation API step, scope discovery, output hooks, health check | Go package |
 | `pkg/pulumicli` — the command line, assembled from the two above | Go package |
+| `pkg/urngolden` — Pulumi URN goldens: pin the resources a stack registers under mocks (`Stacks`, `Layout`, `Assert`), plus the AWS mock answers (`AWSState`, `AWSCall`) and `FakeAWS`; `UPDATE_GOLDEN=1` rewrites | Go test helper package |
 | `pulumi-pipeline` — the command | release archives, or `go install github.com/truvity/pulumi-pipeline/cmd/pulumi-pipeline@v0.1.0` |
 
 ## Who it is for
