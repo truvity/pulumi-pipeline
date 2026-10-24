@@ -5,7 +5,7 @@ Each hand-cut tag gets one heading.
 Entries are written for someone deciding whether to bump: what changed for
 them, and for anything breaking, what to do.
 
-## Unreleased
+## v0.9.0
 
 - `pkg/urngolden`: `Stacks`, the check of a scope's stacks: each stack's
   dispatch pinned to `<Dir>/urns-<stack>.yaml` (`Project`, `Names`, `Target`,
