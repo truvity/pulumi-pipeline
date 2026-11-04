@@ -65,6 +65,12 @@ type (
 		Root      string // checkout root; empty means the nearest ancestor holding go.mod
 		Steps     []Step
 		BeforeRun BeforeRunFunc // optional pre-flight hook (e.g., render CRDs)
+		// Scope is the scope's own name, which Ownership.Stacks is matched
+		// against ("scope/stack"). BuildPipelineCommands sets it.
+		Scope string
+		// Ownership is the repository's declaration of its origin and the
+		// stacks it owns. The zero value declares nothing.
+		Ownership Ownership
 	}
 
 	// Scope defines a named group of steps that becomes a CLI subcommand.
@@ -81,6 +87,8 @@ type (
 		Usage  string // CLI usage description
 		Root   string // checkout root handed to every scope; empty means the nearest ancestor holding go.mod
 		Scopes []Scope
+		// Ownership is handed to every scope; see Config.Ownership.
+		Ownership Ownership
 	}
 
 	// ListMetadataFunc is an optional hook for enriching ListSteps output

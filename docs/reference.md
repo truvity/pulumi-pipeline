@@ -52,13 +52,19 @@ exits 1 if any failed.
 | --- | --- |
 | `--all`, `--exclusive`, `-e` | As above. |
 | `--step-timeout D` | Per-step clock. |
-| `--allow-stale-checkout` | (`deploy`, `destroy`, `refresh`; only the first two are gated.) Proceed although the checkout is dirty, behind its upstream or unverifiable. Each reason is logged at WARN. |
+| `--allow-stale-checkout` | (`deploy`, `destroy`, `refresh`; only the first two are gated.) Proceed although the checkout is dirty, behind its upstream or unverifiable. Each reason is logged at WARN. It does not cover the origin check or stack ownership. |
 
 Environment: `CI=true` relaxes the checkout gate without the flag, skipping
 only the upstream comparison (detached HEAD or no upstream) and logging each
 skipped check at WARN; a dirty tree is still refused. A local shell that
 exports `CI=true` bypasses the same checks. See
 [safety](safety.md#the-checkout-gate).
+
+With an ownership declaration in `.pulumi-pipeline.yaml` (below), `deploy`
+and `destroy` also refuse a checkout whose remote is not a clone of the
+declared `origin`, and any stack outside `owned_stacks`. Neither has an
+override. See [the origin check](safety.md#the-origin-check) and
+[stack ownership](safety.md#stack-ownership).
 
 
 
@@ -87,6 +93,8 @@ reported as timed out.
 | `TopologicalSort`, `ResolveMultiSubgraph`, `ResolveMultiDependents` | DAG operations. |
 | `Run`, `RunWith`, `RunOptions` | Execute a scope. `RunWith` takes the options: `Exclusive`, `All`, `Detail`, `ShowProviders`, `StepTimeout`, `ExpectNoChanges`, `AllowStaleCheckout`. `Run` is `RunWith` with the defaults. |
 | `CheckCheckout` | The checkout gate as a function: returns the reasons a checkout is not safe to apply from. It is always the strict gate; the `CI=true` relaxation applies only inside `RunWith`. |
+| `Ownership` | A repository's declaration: `Origin` (`owner/name`) and `Stacks` (`scope/stack` patterns). The zero value declares nothing. `Validate` reports a malformed one; `Owns(scope, stack)` matches it. Set on `MultiConfig.Ownership` (handed to every scope) or `Config.Ownership`; `Config.Scope` is the scope name it is matched against, which `BuildPipelineCommands` sets. |
+| `CheckOrigin` | The origin check as a function: an error when the checkout's remote is not a clone of the given `owner/name`. |
 | `BuildPipelineCommands`, `BuildListCommand` | The command tree over a `MultiConfig`. |
 | `DefaultStepTimeout` | 30 minutes. |
 
@@ -109,11 +117,24 @@ reported as timed out.
 
 ## Configuration file
 
-`.pulumi-pipeline.yaml` at the checkout root:
+`.pulumi-pipeline.yaml` at the checkout root. Every key is optional, and
+an unknown key is an error.
 
 ```yaml
 scopes_dir: deploy
+origin: example-org/infra
+owned_stacks:
+  - network/prod
+  - apps/*
 ```
+
+| Key | Meaning |
+| --- | --- |
+| `scopes_dir` | The scopes directory, below the flag and the environment in precedence. |
+| `origin` | The repository this checkout must be a clone of, as its path on the host (`owner/name`). `deploy` and `destroy` refuse otherwise. |
+| `owned_stacks` | The stacks this repository owns, as `scope/stack`; either half may be a `path.Match` pattern. `deploy` and `destroy` refuse any other. |
+
+A malformed `origin` or `owned_stacks` entry is an error for every command.
 
 ## Environment
 

@@ -37,6 +37,28 @@ directory called `deploy` existing.
 `--root` names the checkout root; the default is the nearest ancestor of the
 working directory that holds a `.git` entry.
 
+## Declare what the repository is and owns
+
+Once the same programs or stack files can exist in more than one
+repository, declare which repository this is and which stacks it owns, in
+`.pulumi-pipeline.yaml`:
+
+```yaml
+origin: example-org/infra
+owned_stacks:
+  - network/*
+  - apps/prod
+```
+
+`deploy` and `destroy` then refuse a checkout whose remote is not a clone
+of `example-org/infra` and any stack outside the list (see
+[the origin check](safety.md#the-origin-check) and
+[stack ownership](safety.md#stack-ownership)). Both keys are optional and
+independent; without them nothing changes. Before committing the list, run
+`pulumi-pipeline list` and each `<scope> list` to see every stack the
+repository discovers, and prove the declaration with a `diff`, which it
+does not gate, followed by the deploy you were going to make anyway.
+
 ## The first run
 
 ```sh

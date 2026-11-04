@@ -53,6 +53,10 @@ the ones that can be overridden say so and log loudly when they are. The
 checkout gate relaxes on its own under `CI=true` (a runner's detached HEAD
 has no upstream) but still refuses a dirty tree; a local shell exporting
 `CI=true` bypasses the same checks ([safety](docs/safety.md#the-checkout-gate)).
+A repository that declares its origin and the stacks it owns in
+`.pulumi-pipeline.yaml` also gets two refusals with no override: a deploy
+from a clone of another repository, and a deploy of a stack it does not own
+([safety](docs/safety.md#the-origin-check)).
 
 Steps that carry no edges run in name order; steps that do run in
 topological order (reverse for `destroy`). A dry run continues past a

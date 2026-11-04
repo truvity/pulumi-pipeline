@@ -72,6 +72,12 @@ func Run(
 //
 // Gates, in the order they act:
 //   - ExpectNoChanges is refused for any action but ActionDryRun.
+//   - A malformed cfg.Ownership is refused for any action.
+//   - Deploy and destroy refuse a stack outside cfg.Ownership.Stacks, when the
+//     repository declares them; nothing overrides this.
+//   - Deploy and destroy refuse a checkout whose remote is not a clone of
+//     cfg.Ownership.Origin (CheckOrigin), when the repository declares one;
+//     nothing overrides this either.
 //   - Deploy and destroy refuse a dirty checkout or one behind its upstream
 //     (CheckCheckout) unless AllowStaleCheckout says otherwise.
 //   - Every step runs under StepTimeout.
@@ -92,6 +98,10 @@ func RunWith(
 		return fmt.Errorf("--expect-no-changes only applies to diff, not %s", action)
 	}
 
+	if err := cfg.Ownership.Validate(); err != nil {
+		return err
+	}
+
 	repoRoot, err := cfg.RootDir()
 	if err != nil {
 		return fmt.Errorf("find repo root: %w", err)
@@ -103,6 +113,14 @@ func RunWith(
 	}
 
 	if action == ActionExecute || action == ActionDestroy {
+		if err := requireOwnership(cfg, steps, action); err != nil {
+			return err
+		}
+
+		if err := requireOrigin(ctx, repoRoot, cfg.Ownership.Origin); err != nil {
+			return err
+		}
+
 		if err := requireFreshCheckout(ctx, logger, repoRoot, opts.AllowStaleCheckout); err != nil {
 			return err
 		}

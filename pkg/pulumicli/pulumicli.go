@@ -7,6 +7,7 @@ package pulumicli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -53,6 +54,10 @@ type (
 	// fileConfig is ConfigFile's schema. Unknown keys are refused.
 	fileConfig struct {
 		ScopesDir string `yaml:"scopes_dir"`
+		// Origin and OwnedStacks are the repository's ownership declaration
+		// (pipeline.Ownership); absent, neither is checked.
+		Origin      string   `yaml:"origin"`
+		OwnedStacks []string `yaml:"owned_stacks"`
 	}
 )
 
@@ -95,9 +100,19 @@ func run(ctx context.Context, logger *slog.Logger, args []string, opts Options) 
 		return err
 	}
 
-	scopesDir, err := resolveScopesDir(root, pre.scopesDir, opts.ScopesDir)
+	fc, err := readConfigFile(root)
 	if err != nil {
 		return err
+	}
+
+	scopesDir, err := resolveScopesDir(fc, pre.scopesDir, opts.ScopesDir)
+	if err != nil {
+		return err
+	}
+
+	ownership := pipeline.Ownership{Origin: fc.Origin, Stacks: fc.OwnedStacks}
+	if err := ownership.Validate(); err != nil {
+		return fmt.Errorf("%s: %w", ConfigFile, err)
 	}
 
 	scopes, err := pulumistep.Discover(pulumistep.DiscoverOptions{Root: root, ScopesDir: scopesDir, Hooks: opts.Hooks})
@@ -106,10 +121,11 @@ func run(ctx context.Context, logger *slog.Logger, args []string, opts Options) 
 	}
 
 	cfg := pipeline.MultiConfig{
-		Name:   opts.Name,
-		Usage:  fmt.Sprintf("%s (scopes discovered from %s)", opts.Usage, scopesDir),
-		Root:   root,
-		Scopes: scopes,
+		Name:      opts.Name,
+		Usage:     fmt.Sprintf("%s (scopes discovered from %s)", opts.Usage, scopesDir),
+		Root:      root,
+		Scopes:    scopes,
+		Ownership: ownership,
 	}
 
 	cmd := &cli.Command{
@@ -187,10 +203,34 @@ func resolveRoot(flagValue string) (string, error) {
 	return root, nil
 }
 
+// readConfigFile reads ConfigFile at root. A missing file is the zero value;
+// an unknown key is an error.
+func readConfigFile(root string) (fileConfig, error) {
+	var fc fileConfig
+
+	data, err := os.ReadFile(filepath.Join(root, ConfigFile))
+	if os.IsNotExist(err) {
+		return fc, nil
+	}
+
+	if err != nil {
+		return fc, fmt.Errorf("read %s: %w", ConfigFile, err)
+	}
+
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	dec.KnownFields(true)
+
+	if err := dec.Decode(&fc); err != nil && !errors.Is(err, io.EOF) {
+		return fc, fmt.Errorf("%s: %w", ConfigFile, err)
+	}
+
+	return fc, nil
+}
+
 // resolveScopesDir applies the precedence flag, environment, config file,
 // caller default. There is deliberately no built-in default: a directory name
 // that works for one repository would quietly find nothing in the next.
-func resolveScopesDir(root, flagValue, fallback string) (string, error) {
+func resolveScopesDir(fc fileConfig, flagValue, fallback string) (string, error) {
 	if flagValue != "" {
 		return flagValue, nil
 	}
@@ -199,22 +239,8 @@ func resolveScopesDir(root, flagValue, fallback string) (string, error) {
 		return v, nil
 	}
 
-	data, err := os.ReadFile(filepath.Join(root, ConfigFile))
-	if err == nil {
-		var fc fileConfig
-
-		dec := yaml.NewDecoder(strings.NewReader(string(data)))
-		dec.KnownFields(true)
-
-		if err := dec.Decode(&fc); err != nil {
-			return "", fmt.Errorf("%s: %w", ConfigFile, err)
-		}
-
-		if fc.ScopesDir != "" {
-			return fc.ScopesDir, nil
-		}
-	} else if !os.IsNotExist(err) {
-		return "", fmt.Errorf("read %s: %w", ConfigFile, err)
+	if fc.ScopesDir != "" {
+		return fc.ScopesDir, nil
 	}
 
 	if fallback != "" {
