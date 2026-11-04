@@ -224,7 +224,39 @@ func readConfigFile(root string) (fileConfig, error) {
 		return fc, fmt.Errorf("%s: %w", ConfigFile, err)
 	}
 
+	// An empty owned_stacks decodes exactly as an absent one, and absent
+	// turns the ownership check off. Someone who writes the key empty (or
+	// comments out every entry) most likely means "owns nothing", the
+	// opposite, so the key's presence is checked on its own and an empty
+	// one refused.
+	if len(fc.OwnedStacks) == 0 && hasKey(data, "owned_stacks") {
+		return fc, fmt.Errorf("%s: owned_stacks is empty; list the stacks this repository owns, "+
+			"or remove the key to turn the ownership check off", ConfigFile)
+	}
+
 	return fc, nil
+}
+
+// hasKey reports whether the top-level mapping of the YAML document in data
+// holds key, whatever its value, null included.
+func hasKey(data []byte, key string) bool {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil || len(doc.Content) == 0 {
+		return false
+	}
+
+	m := doc.Content[0]
+	if m.Kind != yaml.MappingNode {
+		return false
+	}
+
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			return true
+		}
+	}
+
+	return false
 }
 
 // resolveScopesDir applies the precedence flag, environment, config file,

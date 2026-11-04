@@ -16,10 +16,11 @@ them, and for anything breaking, what to do.
   `Config.Scope` is new and is set by `BuildPipelineCommands`. Additive:
   with nothing declared, nothing changes.
 - `pkg/pulumicli`: `.pulumi-pipeline.yaml` accepts `origin:` and
-  `owned_stacks:`, which become that declaration. The file is now read on
-  every run, also when `--scopes-dir` or the environment names the scopes
-  directory, so a malformed file is an error where before it was ignored;
-  an empty file is no longer an error.
+  `owned_stacks:`, which become that declaration. An `owned_stacks:` key
+  with no entries is refused rather than read as "not declared". The file
+  is now read on every run, also when `--scopes-dir` or the environment
+  names the scopes directory, so a malformed file is an error where before
+  it was ignored; an empty file is no longer an error.
 
 ## v0.9.0
 
