@@ -30,6 +30,10 @@ func TestRemoteRepoPath(t *testing.T) {
 		{"file:///srv/git/example-org/infra.git", "", false},
 		{"https://github.com/infra.git", "", false},
 		{"git@github.com:infra", "", false},
+		{"user:secret@github.com:example-org/infra", "", false},
+		{"git@[::1]:example-org/infra", "", false},
+		{"ssh://git@github.com/~/example-org/infra", "", false},
+		{"ssh://git@github.com/~user/infra", "", false},
 		{"", "", false},
 	}
 
@@ -58,6 +62,7 @@ func TestOwnership_Validate(t *testing.T) {
 		"one segment":           {Origin: "infra"},
 		"padded origin":         {Origin: " example-org/infra"},
 		"empty segment":         {Origin: "example-org//infra"},
+		"userinfo in origin":    {Origin: "secret@github.com:example-org/infra"},
 		"stack without a scope": {Stacks: []string{"prod"}},
 		"empty half":            {Stacks: []string{"net/"}},
 		"too many slashes":      {Stacks: []string{"net/prod/x"}},
@@ -107,6 +112,16 @@ func TestCheckOrigin(t *testing.T) {
 		assert.Contains(t, err.Error(), "is a clone of example-org/fork")
 		assert.Contains(t, err.Error(), "declares its origin as example-org/infra")
 		assert.NotContains(t, err.Error(), "secret", "a credential in the URL must not be printed")
+	})
+
+	t.Run("a credential before the host of a scp-like remote is not printed", func(t *testing.T) {
+		work, _ := fixture(t)
+		setOrigin(t, work, "user:ghp_SECRET@github.com:example-org/infra")
+
+		err := CheckOrigin(ctx, work, "example-org/infra")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not the URL of a hosted repository")
+		assert.NotContains(t, err.Error(), "SECRET", "a credential in the URL must not be printed")
 	})
 
 	t.Run("a local remote cannot be identified", func(t *testing.T) {
@@ -268,6 +283,19 @@ func TestRunWith_StackOwnership(t *testing.T) {
 
 		err := RunWith(context.Background(), quiet(), cfg, ActionExecute, []string{"dev"}, RunOptions{})
 		require.Error(t, err)
+		assert.Contains(t, err.Error(), "net/prod")
+		assert.Empty(t, ran)
+	})
+
+	t.Run("a dependent pulled in by destroy counts", func(t *testing.T) {
+		var ran []string
+
+		cfg := ownedConfig(work, &ran, "net/dev")
+		cfg.Steps[1].DependsOn = []string{"dev"}
+
+		err := RunWith(context.Background(), quiet(), cfg, ActionDestroy, []string{"dev"}, RunOptions{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "refusing to destroy")
 		assert.Contains(t, err.Error(), "net/prod")
 		assert.Empty(t, ran)
 	})

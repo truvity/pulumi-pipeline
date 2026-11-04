@@ -223,7 +223,12 @@ func remoteRepoPath(raw string) (string, bool) {
 }
 
 // cleanRepoPath normalises a repository path: surrounding slashes and a .git
-// suffix dropped. It must have at least two non-empty segments.
+// suffix dropped. It must have at least two non-empty segments, none holding
+// a character that a hosted repository path never does. Refusing '@' and ':'
+// matters beyond tidiness: a scp-like remote with userinfo before the host
+// (user:token@host:owner/name) would otherwise yield a "path" that carries
+// the credential, and the mismatch error prints the path. A leading '~' is a
+// home-relative path (ssh://host/~/name), not a hosted repository.
 func cleanRepoPath(p string) (string, bool) {
 	p = strings.Trim(strings.TrimSpace(p), "/")
 	p = strings.Trim(strings.TrimSuffix(p, ".git"), "/")
@@ -234,7 +239,7 @@ func cleanRepoPath(p string) (string, bool) {
 	}
 
 	for _, s := range segments {
-		if s == "" || s == "." || s == ".." || strings.ContainsAny(s, " \t\\") {
+		if s == "" || s == "." || s == ".." || strings.HasPrefix(s, "~") || strings.ContainsAny(s, " \t\\@:[]") {
 			return "", false
 		}
 	}

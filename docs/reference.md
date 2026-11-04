@@ -135,6 +135,9 @@ owned_stacks:
 | `owned_stacks` | The stacks this repository owns, as `scope/stack`; either half may be a `path.Match` pattern. `deploy` and `destroy` refuse any other. |
 
 A malformed `origin` or `owned_stacks` entry is an error for every command.
+So is an `owned_stacks` key with no entries (`[]`, or every entry commented
+out): an absent key turns the check off, so an empty one would too, which
+is the opposite of what it reads as. Remove the key to turn the check off.
 
 ## Environment
 

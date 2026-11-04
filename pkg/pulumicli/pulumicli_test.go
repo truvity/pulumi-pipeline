@@ -111,6 +111,22 @@ func TestReadConfigFile_OwnershipDeclaration(t *testing.T) {
 	}, fc)
 }
 
+func TestReadConfigFile_EmptyOwnedStacksIsRefused(t *testing.T) {
+	for name, content := range map[string]string{
+		"empty list":        "owned_stacks: []\n",
+		"null":              "owned_stacks:\n",
+		"entries commented": "scopes_dir: deploy\nowned_stacks:\n  # - net/prod\n",
+		"explicit null":     "owned_stacks: null\n",
+	} {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, ConfigFile), []byte(content), 0o644))
+
+		_, err := readConfigFile(root)
+		require.Error(t, err, name)
+		assert.Contains(t, err.Error(), "owned_stacks is empty", name)
+	}
+}
+
 func TestMain_MalformedOwnershipIsRefusedForEveryCommand(t *testing.T) {
 	root := scopesTree(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, ConfigFile), []byte("owned_stacks: [net]\n"), 0o644))
