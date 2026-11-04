@@ -5,7 +5,7 @@ Each hand-cut tag gets one heading.
 Entries are written for someone deciding whether to bump: what changed for
 them, and for anything breaking, what to do.
 
-## Unreleased
+## v0.10.0
 
 - `pkg/pipeline`: two opt-in refusals for `deploy` and `destroy`, declared
   by a repository through `Ownership` (`MultiConfig.Ownership` or
