@@ -116,12 +116,12 @@ func TestCheckOrigin(t *testing.T) {
 
 	t.Run("a credential before the host of a scp-like remote is not printed", func(t *testing.T) {
 		work, _ := fixture(t)
-		setOrigin(t, work, "user:ghp_SECRET@github.com:example-org/infra")
+		setOrigin(t, work, "user:s3cr3t-credential@github.com:example-org/infra")
 
 		err := CheckOrigin(ctx, work, "example-org/infra")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not the URL of a hosted repository")
-		assert.NotContains(t, err.Error(), "SECRET", "a credential in the URL must not be printed")
+		assert.NotContains(t, err.Error(), "s3cr3t-credential", "a credential in the URL must not be printed")
 	})
 
 	t.Run("a local remote cannot be identified", func(t *testing.T) {
