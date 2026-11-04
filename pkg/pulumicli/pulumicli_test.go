@@ -39,25 +39,28 @@ func TestResolveScopesDir_Precedence(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, ConfigFile), []byte("scopes_dir: from-file\n"), 0o644))
 
+	fc, err := readConfigFile(root)
+	require.NoError(t, err)
+
 	t.Setenv(EnvScopesDir, "")
 
-	got, err := resolveScopesDir(root, "", "fallback")
+	got, err := resolveScopesDir(fc, "", "fallback")
 	require.NoError(t, err)
 	assert.Equal(t, "from-file", got, "the config file beats the caller's default")
 
 	t.Setenv(EnvScopesDir, "from-env")
 
-	got, err = resolveScopesDir(root, "", "fallback")
+	got, err = resolveScopesDir(fc, "", "fallback")
 	require.NoError(t, err)
 	assert.Equal(t, "from-env", got, "the environment beats the file")
 
-	got, err = resolveScopesDir(root, "from-flag", "fallback")
+	got, err = resolveScopesDir(fc, "from-flag", "fallback")
 	require.NoError(t, err)
 	assert.Equal(t, "from-flag", got, "the flag beats everything")
 
 	t.Setenv(EnvScopesDir, "")
 
-	got, err = resolveScopesDir(t.TempDir(), "", "fallback")
+	got, err = resolveScopesDir(fileConfig{}, "", "fallback")
 	require.NoError(t, err)
 	assert.Equal(t, "fallback", got)
 }
@@ -65,22 +68,76 @@ func TestResolveScopesDir_Precedence(t *testing.T) {
 func TestResolveScopesDir_NoDefaultIsAnError(t *testing.T) {
 	t.Setenv(EnvScopesDir, "")
 
-	_, err := resolveScopesDir(t.TempDir(), "", "")
+	_, err := resolveScopesDir(fileConfig{}, "", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--scopes-dir")
 	assert.Contains(t, err.Error(), EnvScopesDir)
 	assert.Contains(t, err.Error(), ConfigFile)
 }
 
-func TestResolveScopesDir_ConfigFileRefusesUnknownKeys(t *testing.T) {
+func TestReadConfigFile_RefusesUnknownKeys(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, ConfigFile), []byte("scope_dir: typo\n"), 0o644))
 
-	t.Setenv(EnvScopesDir, "")
-
-	_, err := resolveScopesDir(root, "", "")
+	_, err := readConfigFile(root)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), ConfigFile)
+}
+
+func TestReadConfigFile_MissingAndEmptyAreTheZeroValue(t *testing.T) {
+	fc, err := readConfigFile(t.TempDir())
+	require.NoError(t, err)
+	assert.Equal(t, fileConfig{}, fc)
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, ConfigFile), []byte("# nothing yet\n"), 0o644))
+
+	fc, err = readConfigFile(root)
+	require.NoError(t, err)
+	assert.Equal(t, fileConfig{}, fc)
+}
+
+func TestReadConfigFile_OwnershipDeclaration(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, ConfigFile), []byte(
+		"scopes_dir: deploy\norigin: example-org/infra\nowned_stacks:\n  - net/prod\n  - apps/*\n"), 0o644))
+
+	fc, err := readConfigFile(root)
+	require.NoError(t, err)
+	assert.Equal(t, fileConfig{
+		ScopesDir:   "deploy",
+		Origin:      "example-org/infra",
+		OwnedStacks: []string{"net/prod", "apps/*"},
+	}, fc)
+}
+
+func TestMain_MalformedOwnershipIsRefusedForEveryCommand(t *testing.T) {
+	root := scopesTree(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, ConfigFile), []byte("owned_stacks: [net]\n"), 0o644))
+
+	t.Setenv(EnvScopesDir, "")
+
+	var stderr bytes.Buffer
+
+	code := Main(context.Background(), []string{"tool", "--root", root, "--scopes-dir", "deploy", "list"}, Options{Stderr: &stderr})
+	assert.Equal(t, 1, code)
+	assert.Contains(t, stderr.String(), "not scope/stack")
+}
+
+func TestMain_DeployOfAStackTheRepositoryDoesNotOwnIsRefused(t *testing.T) {
+	root := scopesTree(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, ConfigFile), []byte("owned_stacks: [apps/dev]\n"), 0o644))
+
+	t.Setenv(EnvScopesDir, "")
+
+	var stderr bytes.Buffer
+
+	// The ownership refusal comes before the checkout gate and before any
+	// stack is selected, so this needs neither git nor pulumi.
+	code := Main(context.Background(), []string{"tool", "--root", root, "--scopes-dir", "deploy", "net", "deploy", "prod"}, Options{Stderr: &stderr})
+	assert.Equal(t, 1, code)
+	assert.Contains(t, stderr.String(), "does not own")
+	assert.Contains(t, stderr.String(), "net/prod")
 }
 
 func scopesTree(t *testing.T) string {

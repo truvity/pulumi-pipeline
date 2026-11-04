@@ -1,8 +1,10 @@
 # Safety
 
-Each refusal below is on by default, says what it saw, and names the way
-past it when there is one. Each exists because the failure it prevents
-happened.
+Each refusal below is on by default, except the two that act on a
+repository's own declaration of what it is and owns, which are off until it
+declares. Each says what it saw and names the way past it when there is one,
+and each exists because the failure it prevents happened or was one step
+away.
 
 ## The checkout gate
 
@@ -43,6 +45,55 @@ profile. A dirty tree is refused either way.
 **Past it.** `--allow-stale-checkout`. Every reason it overrides is logged at
 WARN as `PROCEEDING FROM A CHECKOUT THAT IS NOT PROVEN CURRENT`. It is a flag
 for a person, not for a script.
+
+## The origin check
+
+**Refuses:** `deploy` and `destroy` from a checkout whose remote is not a
+clone of the repository it declares as its origin (`origin:` in
+`.pulumi-pipeline.yaml`, or `Ownership.Origin`). Off until a repository
+declares one.
+
+**Why.** Once a program and its stack files exist in more than one
+repository (a fork, a copy that seeded a new repository, a clone of the
+repository before it was renamed or split), a checkout that is clean and
+current proves nothing about whether it is the *right* checkout. The
+freshness checks above compare a checkout with its own remote; a fork is
+perfectly current with itself.
+
+**How it decides.** It takes the remote the freshness check compares
+against (the current branch's; `origin` when HEAD is detached or the branch
+has none), reads its URL with `git remote get-url`, and compares the
+repository path in it (`owner/name`) with the declaration, ignoring case.
+The host is not compared, so an SSH host alias works. A remote that is a
+local path, or no remote at all, cannot be identified and is refused. The
+URL is never printed, since it may carry a credential.
+
+**Past it.** None: neither `--allow-stale-checkout` nor `CI=true` relaxes
+it. A runner checks out the repository it was triggered from, so the check
+holds there. Run from a clone of the declared repository, point the remote
+at it (`git remote set-url`), or correct the declaration.
+
+## Stack ownership
+
+**Refuses:** `deploy` and `destroy` of any stack, as `scope/stack`, that
+the repository's declaration (`owned_stacks:` in `.pulumi-pipeline.yaml`,
+or `Ownership.Stacks`) does not cover. Off until a repository declares the
+stacks it owns.
+
+**Why.** Scopes and stacks are discovered from the files in the tree, so a
+stack file copied into a second repository is a second, equally runnable
+way to apply the same stack. Two repositories applying one stack converge it
+on whichever program ran last.
+
+**How it decides.** Every step the run would execute is checked before the
+first one starts, including the dependencies that naming a step pulls in.
+A declared entry is a `path.Match` pattern over `scope/stack`, so
+`network/*` covers a whole scope. Steps that are not stacks (exec and
+confirm steps) are not checked. `diff` and `refresh` are not gated. A
+malformed declaration is an error for every command.
+
+**Past it.** None. Apply the stack from the repository that owns it, or add
+it to the declaration of this one if it does.
 
 ## The post-apply refresh-preview
 
@@ -101,6 +152,8 @@ something stops at the first failure.
 
 ## What is not gated
 
+Without a declaration, nothing checks that the checkout is the repository
+that owns its stacks (see the origin check and stack ownership above).
 Nothing checks that you are pointed at the backend, account or environment
 you meant. Those are the caller's, and the pipeline has no way to know what
 you meant. Put that check in a `BeforeRun` hook on the scope.

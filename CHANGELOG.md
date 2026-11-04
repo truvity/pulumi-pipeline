@@ -5,6 +5,22 @@ Each hand-cut tag gets one heading.
 Entries are written for someone deciding whether to bump: what changed for
 them, and for anything breaking, what to do.
 
+## Unreleased
+
+- `pkg/pipeline`: two opt-in refusals for `deploy` and `destroy`, declared
+  by a repository through `Ownership` (`MultiConfig.Ownership` or
+  `Config.Ownership`). `Origin` (`owner/name`) refuses a checkout whose
+  remote is a clone of another repository (`CheckOrigin`); `Stacks`
+  (`scope/stack` patterns) refuses a stack the repository does not own.
+  Neither is covered by `--allow-stale-checkout` or relaxed by `CI=true`.
+  `Config.Scope` is new and is set by `BuildPipelineCommands`. Additive:
+  with nothing declared, nothing changes.
+- `pkg/pulumicli`: `.pulumi-pipeline.yaml` accepts `origin:` and
+  `owned_stacks:`, which become that declaration. The file is now read on
+  every run, also when `--scopes-dir` or the environment names the scopes
+  directory, so a malformed file is an error where before it was ignored;
+  an empty file is no longer an error.
+
 ## v0.9.0
 
 - `pkg/urngolden`: `Stacks`, the check of a scope's stacks: each stack's

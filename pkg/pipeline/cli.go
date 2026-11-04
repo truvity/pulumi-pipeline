@@ -33,6 +33,8 @@ func BuildPipelineCommands(
 			Root:      cfg.Root,
 			Steps:     scope.Steps,
 			BeforeRun: scope.BeforeRun,
+			Scope:     scope.Name,
+			Ownership: cfg.Ownership,
 		}
 
 		commands = append(commands, &cli.Command{
