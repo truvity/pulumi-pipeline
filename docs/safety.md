@@ -1,8 +1,8 @@
 # Safety
 
-Each refusal below is on by default, except the two that act on a
-repository's own declaration of what it is and owns, which are off until it
-declares. Each says what it saw and names the way past it when there is one,
+Each refusal below is on by default, except the three that act on a
+repository's own declaration of what it is, what it owns and what it reads
+from elsewhere, which are off until it declares. Each says what it saw and names the way past it when there is one,
 and each exists because the failure it prevents happened or was one step
 away.
 
@@ -95,6 +95,49 @@ malformed declaration is an error for every command.
 **Past it.** None. Apply the stack from the repository that owns it, or add
 it to the declaration of this one if it does.
 
+## External inputs
+
+**Refuses:** `deploy` of a stack that reads an external input
+(`inputs:` in `.pulumi-pipeline.yaml`, or `Config.Inputs`) when the local
+copy is not the one the publisher published, was published longer ago than
+the input's `max_age`, cannot be looked up, or has no resolver for its
+source scheme. Off until a repository declares an input.
+
+**Why.** A file that another party publishes and this repository keeps a
+copy of is only as good as the copy. A copy that is old, hand-edited or
+left behind by a publisher that stopped publishing is read by the program
+exactly as a current one would be, and the preview shows nothing wrong.
+Applied against out-of-date names, two writers can end up owning one
+record.
+
+**How it decides.** Before the first step it takes the sha256 of the
+local file's raw bytes and compares it with the digest the resolver reports
+for the input's source, then checks the age of the publication against
+`max_age`. A path that leaves the checkout, by `..` or by a symbolic link,
+is refused. Each input is hashed again before every step, so a file changed
+between steps is not applied. An input whose `stacks` match no stack in the
+run is neither looked up nor hashed; with no `stacks` it covers every run.
+The check runs before the checkout gate, which may fetch. The refusal lists
+every input that is not current, with the short digests and the
+publisher's revision, and never prints the source, which may carry a
+credential.
+
+**`diff`.** It logs each problem at WARN and still runs. With
+`--expect-no-changes` it refuses: a proof of no change made on stale input
+is worthless. `destroy` and `refresh` are not gated.
+
+**Past it.** `deploy --allow-stale-inputs` waives `max_age` only, for a
+publisher that is down; each waived problem is logged at WARN as
+`PROCEEDING ON AN EXTERNAL INPUT PAST ITS MAX AGE`. A digest mismatch, a
+missing file, a failed lookup and a missing resolver have no override, and
+neither `CI=true` nor `--allow-stale-checkout` relaxes any of it. Refresh
+the file from its source.
+
+*Caveat.* The library does no fetching: the gate is only as strong as the
+resolver the caller supplies. The built-in `file:` scheme reads a
+descriptor from disk and is for tests; a descriptor committed beside its
+input proves nothing about the publisher.
+
 ## The post-apply refresh-preview
 
 **Fails:** a `deploy` step whose `up` succeeded, when a `preview --refresh` of
@@ -153,7 +196,9 @@ something stops at the first failure.
 ## What is not gated
 
 Without a declaration, nothing checks that the checkout is the repository
-that owns its stacks (see the origin check and stack ownership above).
+that owns its stacks (see the origin check and stack ownership above), and
+nothing checks a file published elsewhere against its publisher (see
+external inputs).
 Nothing checks that you are pointed at the backend, account or environment
 you meant. Those are the caller's, and the pipeline has no way to know what
 you meant. Put that check in a `BeforeRun` hook on the scope.

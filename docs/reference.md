@@ -52,7 +52,8 @@ exits 1 if any failed.
 | --- | --- |
 | `--all`, `--exclusive`, `-e` | As above. |
 | `--step-timeout D` | Per-step clock. |
-| `--allow-stale-checkout` | (`deploy`, `destroy`, `refresh`; only the first two are gated.) Proceed although the checkout is dirty, behind its upstream or unverifiable. Each reason is logged at WARN. It does not cover the origin check or stack ownership. |
+| `--allow-stale-checkout` | (`deploy`, `destroy`, `refresh`; only the first two are gated.) Proceed although the checkout is dirty, behind its upstream or unverifiable. Each reason is logged at WARN. It does not cover the origin check, stack ownership or external inputs. |
+| `--allow-stale-inputs` | (`deploy` only.) Proceed although an external input was published longer ago than its `max_age`. Each waived problem is logged at WARN. It waives age and nothing else: a digest mismatch, a missing file, a failed lookup and a missing resolver are still refused. |
 
 Environment: `CI=true` relaxes the checkout gate without the flag, skipping
 only the upstream comparison (detached HEAD or no upstream) and logging each
@@ -66,7 +67,10 @@ declared `origin`, and any stack outside `owned_stacks`. Neither has an
 override. See [the origin check](safety.md#the-origin-check) and
 [stack ownership](safety.md#stack-ownership).
 
-
+With `inputs:` declared, `deploy` also refuses an external input whose local
+copy is not the published one or is past its `max_age`, and `diff` warns
+about it (`diff --expect-no-changes` refuses). See
+[external inputs](safety.md#external-inputs).
 
 These are fail-fast: the first failing step stops the run and the error is
 `step <name>: <cause>`.
@@ -91,9 +95,11 @@ reported as timed out.
 | `ExecStep`, `ConfirmStep`, `GenerateStep`, `WithActions`, `WithDependsOn` | Step constructors and options. |
 | `TypedRun`, `TypedProduce`, `TypedConsume`, `TypedTransform`, `Deferred[T]` | Steps whose typed outputs feed later steps and create the DAG edges. |
 | `TopologicalSort`, `ResolveMultiSubgraph`, `ResolveMultiDependents` | DAG operations. |
-| `Run`, `RunWith`, `RunOptions` | Execute a scope. `RunWith` takes the options: `Exclusive`, `All`, `Detail`, `ShowProviders`, `StepTimeout`, `ExpectNoChanges`, `AllowStaleCheckout`. `Run` is `RunWith` with the defaults. |
+| `Run`, `RunWith`, `RunOptions` | Execute a scope. `RunWith` takes the options: `Exclusive`, `All`, `Detail`, `ShowProviders`, `StepTimeout`, `ExpectNoChanges`, `AllowStaleCheckout`, `AllowStaleInputs`. `Run` is `RunWith` with the defaults. |
 | `CheckCheckout` | The checkout gate as a function: returns the reasons a checkout is not safe to apply from. It is always the strict gate; the `CI=true` relaxation applies only inside `RunWith`. |
 | `Ownership` | A repository's declaration: `Origin` (`owner/name`) and `Stacks` (`scope/stack` patterns). The zero value declares nothing. `Validate` reports a malformed one; `Owns(scope, stack)` matches it. Set on `MultiConfig.Ownership` (handed to every scope) or `Config.Ownership`; `Config.Scope` is the scope name it is matched against, which `BuildPipelineCommands` sets. |
+| `ExternalInput`, `InputState`, `InputResolver`, `InputResolverFunc` | A file the deploy reads that is published elsewhere (`Name`, `Path`, `Source`, `MaxAge`, `Stacks`); what a publisher reports about it (`Digest` as `sha256:` and 64 hex digits, `PublishedAt`, `Revision`); and the one-method interface that looks that up for a source. Set on `Config.Inputs` and `Config.InputResolvers` (a map keyed by source scheme), or on `MultiConfig`, which hands both to every scope. The library does no fetching. |
+| `ValidateInputs` | Reports a malformed declaration: a name that is not `[a-z0-9-]+` or is repeated, a path that is not a plain relative path, a source with no scheme, a `max_age` under `MinInputMaxAge` (one minute), a bad `Stacks` pattern. |
 | `CheckOrigin` | The origin check as a function: an error when the checkout's remote is not a clone of the given `owner/name`. |
 | `BuildPipelineCommands`, `BuildListCommand` | The command tree over a `MultiConfig`. |
 | `DefaultStepTimeout` | 30 minutes. |
@@ -113,7 +119,11 @@ reported as timed out.
 
 `Main(ctx, args, Options) int` builds and runs the command. `Options`:
 `Name`, `Usage`, `ScopesDir` (the default when nothing else names one),
-`Hooks`, `Stdout`, `Stderr`. Exit code 0 on success, 1 on any error.
+`Hooks`, `InputResolvers`, `Stdout`, `Stderr`. Exit code 0 on success, 1 on any
+error. `InputResolvers` maps a source scheme to the `pipeline.InputResolver`
+that reads its published state; the built-in `file` scheme
+(`FileInputResolver`, a JSON descriptor with `digest`, `published_at` and
+`revision`) is always present and is for tests and fixtures.
 
 ## Configuration file
 
@@ -126,6 +136,12 @@ origin: example-org/infra
 owned_stacks:
   - network/prod
   - apps/*
+inputs:
+  - name: tenant-inputs
+    path: inputs/tenant-inputs.yaml
+    source: oci://registry.example/inputs/acme@latest
+    max_age: 24h
+    stacks: ["apps/*"]
 ```
 
 | Key | Meaning |
@@ -133,11 +149,13 @@ owned_stacks:
 | `scopes_dir` | The scopes directory, below the flag and the environment in precedence. |
 | `origin` | The repository this checkout must be a clone of, as its path on the host (`owner/name`). `deploy` and `destroy` refuse otherwise. |
 | `owned_stacks` | The stacks this repository owns, as `scope/stack`; either half may be a `path.Match` pattern. `deploy` and `destroy` refuse any other. |
+| `inputs` | The external inputs a deploy must verify. Each entry: `name` (`[a-z0-9-]+`, unique), `path` (the local copy, relative to the root, inside the checkout), `source` (an opaque reference with a scheme, never printed), `max_age` (a Go duration of at least `1m`, required) and optional `stacks` (`scope/stack` patterns; default every stack). |
 
-A malformed `origin` or `owned_stacks` entry is an error for every command.
-So is an `owned_stacks` key with no entries (`[]`, or every entry commented
-out): an absent key turns the check off, so an empty one would too, which
-is the opposite of what it reads as. Remove the key to turn the check off.
+A malformed `origin`, `owned_stacks` or `inputs` entry is an error for every
+command. So is an `owned_stacks` or `inputs` key with no entries (`[]`, or
+every entry commented out): an absent key turns the check off, so an empty
+one would too, which is the opposite of what it reads as. Remove the key to
+turn the check off.
 
 ## Environment
 
