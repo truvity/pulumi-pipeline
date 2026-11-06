@@ -56,7 +56,9 @@ has no upstream) but still refuses a dirty tree; a local shell exporting
 A repository that declares its origin and the stacks it owns in
 `.pulumi-pipeline.yaml` also gets two refusals with no override: a deploy
 from a clone of another repository, and a deploy of a stack it does not own
-([safety](docs/safety.md#the-origin-check)).
+([safety](docs/safety.md#the-origin-check)). Declaring `inputs:` there makes
+a deploy refuse a file published elsewhere that is not the published one or
+is too old ([safety](docs/safety.md#external-inputs)).
 
 Steps that carry no edges run in name order; steps that do run in
 topological order (reverse for `destroy`). A dry run continues past a

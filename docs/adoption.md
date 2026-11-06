@@ -59,6 +59,32 @@ independent; without them nothing changes. Before committing the list, run
 repository discovers, and prove the declaration with a `diff`, which it
 does not gate, followed by the deploy you were going to make anyway.
 
+## Verify the inputs the deploy reads from elsewhere
+
+If the program reads a file that another party publishes and the repository
+keeps a copy of, declare it, so that a copy that is old or edited by hand is
+refused rather than applied:
+
+```yaml
+inputs:
+  - name: tenant-inputs
+    path: inputs/tenant-inputs.yaml
+    source: oci://registry.example/inputs/acme@latest
+    max_age: 24h
+```
+
+The library does not fetch, so a `main` of your own supplies the resolver for
+the source's scheme through `pulumicli.Options.InputResolvers` (or
+`MultiConfig.InputResolvers`). Without one every deploy of a covered stack is
+refused. `deploy` then compares the sha256 of the local file with the
+published digest and the age of the publication with `max_age` (see
+[external inputs](safety.md#external-inputs)). Scope an input to the stacks
+that read it with `stacks:`, so an outage at the publisher blocks only those.
+Do not script `--allow-stale-inputs`: it waives age for a person who has read
+the refusal, and nothing waives a digest mismatch. To try the declaration
+without a publisher, use a `file:` source that points at a descriptor file;
+it proves nothing about a publisher and is for tests.
+
 ## The first run
 
 ```sh
