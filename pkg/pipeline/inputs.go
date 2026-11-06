@@ -255,7 +255,10 @@ func requireInputs(
 		digest, ps := checkInput(ctx, root, in, cfg.InputResolvers)
 		problems = append(problems, ps...)
 
-		if len(ps) == 0 {
+		// An input whose only problem is its age may be waived below, and the
+		// file then still has to hold until the last step: it is guarded
+		// whenever the local copy hashed cleanly and nothing but age is wrong.
+		if digest != "" && onlyAge(ps) {
 			guard.inputs = append(guard.inputs, *in)
 			guard.digests[in.Name] = digest
 		}
@@ -295,6 +298,18 @@ func requireInputs(
 	}
 
 	return guard, nil
+}
+
+// onlyAge reports whether every problem is the one AllowStaleInputs may waive;
+// true for no problems at all.
+func onlyAge(ps []inputProblem) bool {
+	for _, p := range ps {
+		if !p.ageOnly {
+			return false
+		}
+	}
+
+	return true
 }
 
 // coveredInputs returns the declared inputs that feed a stack in the run. An
