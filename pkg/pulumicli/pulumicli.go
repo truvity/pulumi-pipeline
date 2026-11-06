@@ -122,6 +122,11 @@ func run(ctx context.Context, logger *slog.Logger, args []string, opts Options) 
 		return fmt.Errorf("%s: %w", ConfigFile, err)
 	}
 
+	inputs := fc.declaredInputs()
+	if err := pipeline.ValidateInputs(inputs); err != nil {
+		return fmt.Errorf("%s: %w", ConfigFile, err)
+	}
+
 	scopes, err := pulumistep.Discover(pulumistep.DiscoverOptions{Root: root, ScopesDir: scopesDir, Hooks: opts.Hooks})
 	if err != nil {
 		return fmt.Errorf("discovering scopes: %w", err)
@@ -133,6 +138,9 @@ func run(ctx context.Context, logger *slog.Logger, args []string, opts Options) 
 		Root:      root,
 		Scopes:    scopes,
 		Ownership: ownership,
+
+		Inputs:         inputs,
+		InputResolvers: inputResolvers(root, opts.InputResolvers),
 	}
 
 	cmd := &cli.Command{
@@ -239,6 +247,11 @@ func readConfigFile(root string) (fileConfig, error) {
 	if len(fc.OwnedStacks) == 0 && hasKey(data, "owned_stacks") {
 		return fc, fmt.Errorf("%s: owned_stacks is empty; list the stacks this repository owns, "+
 			"or remove the key to turn the ownership check off", ConfigFile)
+	}
+
+	if len(fc.Inputs) == 0 && hasKey(data, "inputs") {
+		return fc, fmt.Errorf("%s: inputs is empty; list the external inputs a deploy must verify, "+
+			"or remove the key to turn the check off", ConfigFile)
 	}
 
 	return fc, nil

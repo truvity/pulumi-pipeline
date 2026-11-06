@@ -203,7 +203,7 @@ func TestMain_CallerResolverIsUsedForItsScheme(t *testing.T) {
 	t.Run("without it the scheme is refused", func(t *testing.T) {
 		code, stderr := runTool(t, Options{}, "--root", root, "--scopes-dir", "deploy", "net", "deploy", "prod")
 		assert.Equal(t, 1, code)
-		assert.Contains(t, stderr, `no resolver for the scheme "oci"`)
+		assert.Contains(t, stderr, "no resolver for the scheme")
 	})
 }
 
