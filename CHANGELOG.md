@@ -19,6 +19,15 @@ them, and for anything breaking, what to do.
   refuses; `destroy` and `refresh` are not gated. The source is never
   printed. `RunOptions.AllowStaleInputs` waives the age check only. The
   library does no fetching. Additive: with nothing declared, nothing changes.
+- `pkg/pulumicli`: `.pulumi-pipeline.yaml` accepts an `inputs:` list
+  (`name`, `path`, `source`, `max_age`, `stacks`), which becomes
+  `pipeline.ExternalInput`. An `inputs:` key with no entries is refused
+  rather than read as "not declared", and a malformed entry is refused for
+  every command. `Options.InputResolvers` supplies a resolver per source
+  scheme; the built-in `file:` scheme (`FileInputResolver`) reads a JSON
+  descriptor from disk and is meant for tests and fixtures. `deploy` takes
+  `--allow-stale-inputs`, which waives `max_age` only. `pipeline.MultiConfig`
+  hands `Inputs` and `InputResolvers` to every scope. Additive.
 
 ## v0.10.1
 

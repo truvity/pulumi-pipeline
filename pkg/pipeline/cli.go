@@ -35,6 +35,9 @@ func BuildPipelineCommands(
 			BeforeRun: scope.BeforeRun,
 			Scope:     scope.Name,
 			Ownership: cfg.Ownership,
+
+			Inputs:         cfg.Inputs,
+			InputResolvers: cfg.InputResolvers,
 		}
 
 		commands = append(commands, &cli.Command{
@@ -138,20 +141,31 @@ func buildScopeActions(
 // mutatingCommand builds deploy, destroy and refresh, which share their flags
 // and their gates.
 func mutatingCommand(cfg Config, logger *slog.Logger, name, usage string, action Action) *cli.Command {
+	flags := append(actionFlags(), timeoutFlag(),
+		&cli.BoolFlag{
+			Name:  "allow-stale-checkout",
+			Usage: "Proceed although the checkout is dirty, behind its upstream or unverifiable (logged loudly)",
+		})
+
+	// Only a deploy reads external inputs, so only a deploy can waive them.
+	if action == ActionExecute {
+		flags = append(flags, &cli.BoolFlag{
+			Name:  "allow-stale-inputs",
+			Usage: "Proceed although an external input was published longer ago than its max_age (logged loudly; a digest mismatch is still refused)",
+		})
+	}
+
 	return &cli.Command{
 		Name:  name,
 		Usage: usage,
-		Flags: append(actionFlags(), timeoutFlag(),
-			&cli.BoolFlag{
-				Name:  "allow-stale-checkout",
-				Usage: "Proceed although the checkout is dirty, behind its upstream or unverifiable (logged loudly)",
-			}),
+		Flags: flags,
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			return RunWith(ctx, logger, cfg, action, cmd.Args().Slice(), RunOptions{
 				Exclusive:          cmd.Bool("exclusive"),
 				All:                cmd.Bool("all"),
 				StepTimeout:        stepTimeoutFrom(cmd),
 				AllowStaleCheckout: cmd.Bool("allow-stale-checkout"),
+				AllowStaleInputs:   action == ActionExecute && cmd.Bool("allow-stale-inputs"),
 			})
 		},
 	}
