@@ -71,6 +71,13 @@ type (
 		// Ownership is the repository's declaration of its origin and the
 		// stacks it owns. The zero value declares nothing.
 		Ownership Ownership
+		// Inputs are the files the deploy reads that are published elsewhere;
+		// a deploy refuses to run on one that is not current. Empty: none.
+		Inputs []ExternalInput
+		// InputResolvers read the published state of an input, keyed by the
+		// scheme of its Source. A declared input whose scheme has no resolver
+		// is refused.
+		InputResolvers map[string]InputResolver
 	}
 
 	// Scope defines a named group of steps that becomes a CLI subcommand.
@@ -89,6 +96,10 @@ type (
 		Scopes []Scope
 		// Ownership is handed to every scope; see Config.Ownership.
 		Ownership Ownership
+		// Inputs and InputResolvers are handed to every scope; see
+		// Config.Inputs.
+		Inputs         []ExternalInput
+		InputResolvers map[string]InputResolver
 	}
 
 	// ListMetadataFunc is an optional hook for enriching ListSteps output
