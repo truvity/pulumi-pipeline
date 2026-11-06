@@ -429,6 +429,37 @@ func TestInputsGate_FileEditedBetweenStepsIsRefused(t *testing.T) {
 	assert.Equal(t, []string{"first"}, ran, "the step after the edit must not run")
 }
 
+func TestInputsGate_FileEditedBetweenStepsIsRefusedWhenAgeIsWaived(t *testing.T) {
+	withCI(t, false)
+
+	work := inputsFixture(t)
+
+	old := currentState()
+	old.PublishedAt = time.Now().Add(-49 * time.Hour)
+
+	var ran []string
+
+	cfg := inputsConfig(work, &ran, &fakeResolver{state: old}, tenantInput())
+	cfg.Steps = []Step{
+		ExecStep("first", func(_ context.Context, _ *slog.Logger, root string, _ Action) (*StepResult, error) {
+			ran = append(ran, "first")
+
+			return nil, os.WriteFile(filepath.Join(root, inputPath), []byte("tenant: globex\n"), 0o644)
+		}, WithActions(AllActions())),
+		ExecStep("second", func(_ context.Context, _ *slog.Logger, _ string, _ Action) (*StepResult, error) {
+			ran = append(ran, "second")
+
+			return nil, nil
+		}, WithActions(AllActions()), WithDependsOn("first")),
+	}
+
+	err := deploy(cfg, RunOptions{AllowStaleInputs: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "step second")
+	assert.Contains(t, err.Error(), "changed during the run")
+	assert.Equal(t, []string{"first"}, ran, "waiving the age must not waive the per-step re-hash")
+}
+
 func TestInputsGate_DiffWarnsAndExpectNoChangesRefuses(t *testing.T) {
 	withCI(t, false)
 
