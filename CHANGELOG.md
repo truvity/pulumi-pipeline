@@ -5,6 +5,21 @@ Each hand-cut tag gets one heading.
 Entries are written for someone deciding whether to bump: what changed for
 them, and for anything breaking, what to do.
 
+## v0.11.0
+
+- `pkg/pipeline`: external inputs. A repository declares the files its
+  deploy reads that are published elsewhere (`ExternalInput`, through
+  `Config.Inputs` or `MultiConfig.Inputs`), each with a `Source` reference, a
+  required `MaxAge` and optional `Stacks`. `deploy` hashes the local copy,
+  asks the `InputResolver` registered for the source's scheme
+  (`Config.InputResolvers`) for the published digest and time, and refuses
+  when the digest differs, when the publication is older than `MaxAge`, when
+  the lookup fails or when the scheme has no resolver; the copy is hashed
+  again before every step. `diff` warns and `diff --expect-no-changes`
+  refuses; `destroy` and `refresh` are not gated. The source is never
+  printed. `RunOptions.AllowStaleInputs` waives the age check only. The
+  library does no fetching. Additive: with nothing declared, nothing changes.
+
 ## v0.10.1
 
 - `github.com/klauspost/compress` v1.20.3, which fixes GO-2026-6865 (a panic decoding two-block frames).
