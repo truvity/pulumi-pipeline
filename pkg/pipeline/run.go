@@ -29,6 +29,11 @@ type RunOptions struct {
 	// dirty, behind its upstream or unverifiable. The refusal it overrides is
 	// logged as a warning instead.
 	AllowStaleCheckout bool
+	// AllowStaleInputs lets deploy run on an external input whose publication
+	// is older than its max_age. It covers age only: a digest mismatch, a
+	// missing file or a failed lookup is still refused. The refusal it
+	// overrides is logged as a warning instead.
+	AllowStaleInputs bool
 }
 
 // Run executes the pipeline steps with target-based resolution. It is RunWith
@@ -80,6 +85,11 @@ func Run(
 //     nothing overrides this either.
 //   - Deploy and destroy refuse a dirty checkout or one behind its upstream
 //     (CheckCheckout) unless AllowStaleCheckout says otherwise.
+//   - Deploy refuses an external input (cfg.Inputs) whose local copy is not
+//     the published one or was published longer ago than its max_age; diff
+//     warns, and refuses with ExpectNoChanges; destroy and refresh are not
+//     gated. Each input is hashed again before every deploy step. Nothing
+//     overrides a digest mismatch; AllowStaleInputs covers age only.
 //   - Every step runs under StepTimeout.
 //   - With ExpectNoChanges, a dry-run step that reports any change fails.
 func RunWith(
@@ -99,6 +109,10 @@ func RunWith(
 	}
 
 	if err := cfg.Ownership.Validate(); err != nil {
+		return err
+	}
+
+	if err := ValidateInputs(cfg.Inputs); err != nil {
 		return err
 	}
 
@@ -124,6 +138,11 @@ func RunWith(
 		if err := requireFreshCheckout(ctx, logger, repoRoot, opts.AllowStaleCheckout); err != nil {
 			return err
 		}
+	}
+
+	guard, err := requireInputs(ctx, logger, cfg, repoRoot, steps, action, opts)
+	if err != nil {
+		return err
 	}
 
 	// Run pre-flight hook (e.g., render CRDs) before any step executes.
@@ -162,6 +181,10 @@ func RunWith(
 			slog.String("step", s.Name),
 			slog.String("action", action.String()),
 		)
+
+		if err := guard.recheck(repoRoot); err != nil {
+			return fmt.Errorf("step %s: %w", s.Name, err)
+		}
 
 		result, stepErr := runStep(ctx, logger, s, repoRoot, action, timeout)
 
