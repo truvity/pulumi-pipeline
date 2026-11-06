@@ -47,6 +47,10 @@ type (
 		ScopesDir string
 		// Hooks persists stack outputs. Nil persists nothing.
 		Hooks pulumistep.OutputHooks
+		// InputResolvers read the published state of an external input,
+		// keyed by the scheme of its source. The built-in "file" scheme is
+		// always present; an entry here replaces it.
+		InputResolvers map[string]pipeline.InputResolver
 		// Stdout and Stderr default to the process's.
 		Stdout, Stderr io.Writer
 	}
@@ -58,6 +62,9 @@ type (
 		// (pipeline.Ownership); absent, neither is checked.
 		Origin      string   `yaml:"origin"`
 		OwnedStacks []string `yaml:"owned_stacks"`
+		// Inputs are the files the deploy reads that are published elsewhere
+		// (pipeline.ExternalInput); absent, none are checked.
+		Inputs []fileInput `yaml:"inputs"`
 	}
 )
 
