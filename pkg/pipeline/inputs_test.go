@@ -592,3 +592,24 @@ func TestShortDuration(t *testing.T) {
 	assert.Equal(t, "5m", shortDuration(5*time.Minute))
 	assert.Equal(t, "0m", shortDuration(0))
 }
+
+func TestInputsGate_RunsBeforeTheCheckoutGate(t *testing.T) {
+	withCI(t, false)
+
+	// Not a git checkout: the checkout gate would refuse it, so the inputs
+	// refusal being the one reported shows which comes first.
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "inputs"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, inputPath), inputBytes, 0o644))
+
+	stale := currentState()
+	stale.Digest = digestOf([]byte("some other bytes"))
+
+	var ran []string
+
+	err := deploy(inputsConfig(root, &ran, &fakeResolver{state: stale}, tenantInput()), RunOptions{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "external inputs are not current")
+	assert.NotContains(t, err.Error(), "git checkout")
+	assert.Empty(t, ran)
+}

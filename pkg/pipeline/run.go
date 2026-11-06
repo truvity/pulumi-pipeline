@@ -77,19 +77,19 @@ func Run(
 //
 // Gates, in the order they act:
 //   - ExpectNoChanges is refused for any action but ActionDryRun.
-//   - A malformed cfg.Ownership is refused for any action.
+//   - A malformed cfg.Ownership or cfg.Inputs is refused for any action.
 //   - Deploy and destroy refuse a stack outside cfg.Ownership.Stacks, when the
 //     repository declares them; nothing overrides this.
 //   - Deploy and destroy refuse a checkout whose remote is not a clone of
 //     cfg.Ownership.Origin (CheckOrigin), when the repository declares one;
 //     nothing overrides this either.
-//   - Deploy and destroy refuse a dirty checkout or one behind its upstream
-//     (CheckCheckout) unless AllowStaleCheckout says otherwise.
 //   - Deploy refuses an external input (cfg.Inputs) whose local copy is not
 //     the published one or was published longer ago than its max_age; diff
 //     warns, and refuses with ExpectNoChanges; destroy and refresh are not
 //     gated. Each input is hashed again before every deploy step. Nothing
 //     overrides a digest mismatch; AllowStaleInputs covers age only.
+//   - Deploy and destroy refuse a dirty checkout or one behind its upstream
+//     (CheckCheckout) unless AllowStaleCheckout says otherwise.
 //   - Every step runs under StepTimeout.
 //   - With ExpectNoChanges, a dry-run step that reports any change fails.
 func RunWith(
@@ -126,7 +126,9 @@ func RunWith(
 		return err
 	}
 
-	if action == ActionExecute || action == ActionDestroy {
+	mutating := action == ActionExecute || action == ActionDestroy
+
+	if mutating {
 		if err := requireOwnership(cfg, steps, action); err != nil {
 			return err
 		}
@@ -134,15 +136,19 @@ func RunWith(
 		if err := requireOrigin(ctx, repoRoot, cfg.Ownership.Origin); err != nil {
 			return err
 		}
-
-		if err := requireFreshCheckout(ctx, logger, repoRoot, opts.AllowStaleCheckout); err != nil {
-			return err
-		}
 	}
 
+	// The inputs come before the checkout gate: they are local reads and one
+	// lookup, and the gate may fetch.
 	guard, err := requireInputs(ctx, logger, cfg, repoRoot, steps, action, opts)
 	if err != nil {
 		return err
+	}
+
+	if mutating {
+		if err := requireFreshCheckout(ctx, logger, repoRoot, opts.AllowStaleCheckout); err != nil {
+			return err
+		}
 	}
 
 	// Run pre-flight hook (e.g., render CRDs) before any step executes.
