@@ -584,3 +584,11 @@ func TestRedactSource(t *testing.T) {
 	assert.Contains(t, msg, "<source>")
 	assert.True(t, strings.HasPrefix(msg, "Get"))
 }
+
+func TestShortDuration(t *testing.T) {
+	assert.Equal(t, "49h", shortDuration(49*time.Hour))
+	assert.Equal(t, "24h", shortDuration(24*time.Hour+10*time.Second))
+	assert.Equal(t, "1h30m", shortDuration(90*time.Minute))
+	assert.Equal(t, "5m", shortDuration(5*time.Minute))
+	assert.Equal(t, "0m", shortDuration(0))
+}
