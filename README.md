@@ -11,12 +11,12 @@ change into a failure on demand, and that put a clock on every step.
 
 | What | Where |
 | --- | --- |
-| Go module `github.com/truvity/pulumi-pipeline` | `go get github.com/truvity/pulumi-pipeline@v0.1.0` |
+| Go module `github.com/truvity/pulumi-pipeline` | `go get github.com/truvity/pulumi-pipeline@v0.11.0` |
 | `pkg/pipeline` — the engine: steps, DAG, typed steps, run, gates, CLI commands | Go package, no Pulumi dependency |
 | `pkg/pulumistep` — the Automation API step, scope discovery, output hooks, health check | Go package |
 | `pkg/pulumicli` — the command line, assembled from the two above | Go package |
 | `pkg/urngolden` — Pulumi URN goldens: pin the resources a stack registers under mocks (`Stacks`, `Layout`, `Assert`), plus the AWS mock answers (`AWSState`, `AWSCall`) and `FakeAWS`; `UPDATE_GOLDEN=1` rewrites | Go test helper package |
-| `pulumi-pipeline` — the command | release archives, or `go install github.com/truvity/pulumi-pipeline/cmd/pulumi-pipeline@v0.1.0` |
+| `pulumi-pipeline` — the command | release archives, or `go install github.com/truvity/pulumi-pipeline/cmd/pulumi-pipeline@v0.11.0` |
 
 ## Who it is for
 
@@ -68,7 +68,7 @@ at the first.
 ## Install and a worked example
 
 ```sh
-go install github.com/truvity/pulumi-pipeline/cmd/pulumi-pipeline@v0.1.0
+go install github.com/truvity/pulumi-pipeline/cmd/pulumi-pipeline@v0.11.0
 ```
 
 A repository laid out like this:
@@ -120,12 +120,26 @@ func main() {
 
 Secret outputs never reach the hook.
 
+## Platform part and company part
+
+**Platform part.** The platform admin runs the `pulumi-pipeline` command, or
+a `main` built on `pkg/pulumicli`, to preview and apply the platform's own
+Pulumi stacks. The platform also owns the state storage and the state prefix
+per company and component, as the
+[delegation model](https://github.com/truvity/policy/blob/master/docs/delegation-model.md)
+lists. Nothing here is deployed to a cluster.
+
+**Company part.** A company's SRE runs the same command on its own stacks,
+from its own repository and under its own state prefix. It commits
+`.pulumi-pipeline.yaml` there to name the scopes directory, the `origin` and
+the `owned_stacks` ([reference](docs/reference.md), [adoption](docs/adoption.md)).
+
 ## Consumers
 
-The estate this was extracted from drives its infrastructure repository
-through `pkg/pulumicli` with an output hook of its own (the Go library
-surface). No other consumer is recorded at v0; a repository that adopts it
-adds a line here.
+The maintainers' platform repository drives its infrastructure through
+`pkg/pulumicli` with an output hook of its own (the Go library surface), and
+pins its Pulumi URN goldens with `pkg/urngolden`. No other consumer is
+recorded; a repository that adopts it adds a line here.
 
 ## Neighbours
 
@@ -160,11 +174,13 @@ over tracked files and runs in the gate.
 ## Status
 
 v0: the API may still move in a minor release, and every move is a
-`Breaking:` bullet in the [CHANGELOG](CHANGELOG.md). The engine and the
-Pulumi step are the code an estate has run for months; the four gates
-(checkout, post-apply refresh-preview, `--expect-no-changes`, step timeout)
-are new and are exercised by the tests here, including against a real
-Pulumi stack on a local file backend. Nothing in the tests touches a cloud.
+`Breaking:` bullet in the [CHANGELOG](CHANGELOG.md). The current version is
+on the [releases page](https://github.com/truvity/pulumi-pipeline/releases).
+The engine and the Pulumi step are the code an estate has run for months; the
+gates (checkout, post-apply refresh-preview, `--expect-no-changes`, step
+timeout, and the opt-in origin, ownership and external-input refusals) are
+exercised by the tests here, including against a real Pulumi stack on a local
+file backend. Nothing in the tests touches a cloud.
 
 ## Development
 
