@@ -129,11 +129,13 @@ per company and component, as the
 [delegation model](https://github.com/truvity/policy/blob/master/docs/delegation-model.md)
 lists. Nothing here is deployed to a cluster.
 
-**Company part.** A company's SRE runs the same command on its own stacks,
-from its own repository and under its own state prefix. It can commit
-`.pulumi-pipeline.yaml` there to name the scopes directory, the `origin`, the
-`owned_stacks` and the `inputs` a deploy must verify; every key is optional
-([reference](docs/reference.md), [adoption](docs/adoption.md)).
+**Company part.** A company's SRE runs the same command by hand, from the
+company's nexus repository, on the stacks that have moved there and under its
+own state prefix; the platform admin applies the rest until they move, and CI
+only checks. The SRE can commit `.pulumi-pipeline.yaml` there to name the
+scopes directory, the `origin`, the `owned_stacks` and the `inputs` a deploy
+must verify; every key is optional ([reference](docs/reference.md),
+[adoption](docs/adoption.md)).
 
 ## Consumers
 
