@@ -130,9 +130,10 @@ per company and component, as the
 lists. Nothing here is deployed to a cluster.
 
 **Company part.** A company's SRE runs the same command on its own stacks,
-from its own repository and under its own state prefix. It commits
-`.pulumi-pipeline.yaml` there to name the scopes directory, the `origin` and
-the `owned_stacks` ([reference](docs/reference.md), [adoption](docs/adoption.md)).
+from its own repository and under its own state prefix. It can commit
+`.pulumi-pipeline.yaml` there to name the scopes directory, the `origin`, the
+`owned_stacks` and the `inputs` a deploy must verify; every key is optional
+([reference](docs/reference.md), [adoption](docs/adoption.md)).
 
 ## Consumers
 
