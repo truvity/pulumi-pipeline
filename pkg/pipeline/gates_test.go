@@ -84,6 +84,150 @@ func TestCheckCheckout_FetchFailureIsAProblem(t *testing.T) {
 	assert.Contains(t, problems[0], "currency cannot be proven")
 }
 
+// commitFile commits a new file in dir and returns the new HEAD.
+func commitFile(t *testing.T, dir, name string) string {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(name), 0o644))
+	require.NoError(t, runGit(dir, "add", "."))
+	require.NoError(t, runGit(dir, "commit", "-m", name))
+
+	out, err := git(context.Background(), dir, "rev-parse", "HEAD")
+	require.NoError(t, err)
+
+	return strings.TrimSpace(out)
+}
+
+// advanceRemote makes the remote's master move by one commit, from a second
+// clone, so that the checkout's own remote-tracking ref still looks current.
+func advanceRemote(t *testing.T, remote string) {
+	t.Helper()
+
+	other := filepath.Join(t.TempDir(), "other")
+	require.NoError(t, runGit(filepath.Dir(other), "clone", remote, other))
+	commitFile(t, other, "advance.txt")
+	require.NoError(t, runGit(other, "push", "origin", "master"))
+}
+
+func TestCheckCheckout_DetachedAtTheTipPasses(t *testing.T) {
+	work, _ := fixture(t)
+	detach(t, work)
+
+	assert.Empty(t, CheckCheckout(context.Background(), work))
+}
+
+func TestCheckCheckout_DetachedAtTheFetchedTipOfAFreshWorktreePasses(t *testing.T) {
+	work, remote := fixture(t)
+	advanceRemote(t, remote)
+	require.NoError(t, runGit(work, "fetch", "origin"))
+
+	wt := filepath.Join(t.TempDir(), "wt")
+	require.NoError(t, runGit(work, "worktree", "add", "--detach", wt, "origin/master"))
+
+	assert.Empty(t, CheckCheckout(context.Background(), wt))
+}
+
+func TestCheckCheckout_DetachedAtAnOlderCommitIsRefused(t *testing.T) {
+	work, remote := fixture(t)
+	detach(t, work)
+	advanceRemote(t, remote)
+
+	problems := CheckCheckout(context.Background(), work)
+	require.Len(t, problems, 1)
+	assert.Contains(t, problems[0], "HEAD is detached at")
+	assert.Contains(t, problems[0], "not at the tip of origin/master")
+	assert.Contains(t, problems[0], "1 commit(s) behind it")
+}
+
+func TestCheckCheckout_DetachedAtAStaleRemoteTrackingRefIsRefused(t *testing.T) {
+	work, remote := fixture(t)
+	advanceRemote(t, remote)
+
+	// origin/master here is the old commit, which is what is checked out.
+	require.NoError(t, runGit(work, "checkout", "--detach", "origin/master"))
+
+	problems := CheckCheckout(context.Background(), work)
+	require.Len(t, problems, 1)
+	assert.Contains(t, problems[0], "commit(s) behind it")
+}
+
+func TestCheckCheckout_DetachedAheadOfTheTipIsRefused(t *testing.T) {
+	work, _ := fixture(t)
+	detach(t, work)
+	commitFile(t, work, "local.txt")
+
+	problems := CheckCheckout(context.Background(), work)
+	require.Len(t, problems, 1)
+	assert.Contains(t, problems[0], "1 commit(s) ahead of it, not published")
+}
+
+func TestCheckCheckout_DetachedDivergedIsRefused(t *testing.T) {
+	work, remote := fixture(t)
+	detach(t, work)
+	commitFile(t, work, "local.txt")
+	advanceRemote(t, remote)
+
+	problems := CheckCheckout(context.Background(), work)
+	require.Len(t, problems, 1)
+	assert.Contains(t, problems[0], "diverged (1 ahead, 1 behind)")
+}
+
+func TestCheckCheckout_DetachedAtTheTipButDirtyIsRefused(t *testing.T) {
+	work, _ := fixture(t)
+	detach(t, work)
+	require.NoError(t, os.WriteFile(filepath.Join(work, "dirty.txt"), []byte("x"), 0o644))
+
+	problems := CheckCheckout(context.Background(), work)
+	require.Len(t, problems, 1)
+	assert.Contains(t, problems[0], "dirty")
+}
+
+func TestCheckCheckout_DetachedWithoutRemoteIsRefused(t *testing.T) {
+	work, _ := fixture(t)
+	detach(t, work)
+	require.NoError(t, runGit(work, "remote", "remove", "origin"))
+
+	problems := CheckCheckout(context.Background(), work)
+	require.Len(t, problems, 1)
+	assert.Contains(t, problems[0], "no remote origin")
+}
+
+func TestCheckCheckout_BranchAtTheTipPasses(t *testing.T) {
+	work, _ := fixture(t)
+
+	assert.Empty(t, CheckCheckout(context.Background(), work))
+}
+
+func TestCheckCheckout_AheadIsRefusedWhenAsked(t *testing.T) {
+	work, _ := fixture(t)
+	commitFile(t, work, "local.txt")
+
+	problems, _ := checkCheckout(context.Background(), work, checkOptions{refuseAhead: true})
+	require.Len(t, problems, 1)
+	assert.Contains(t, problems[0], "1 commit(s) ahead of origin/master")
+	assert.Contains(t, problems[0], "unpublished")
+}
+
+func TestCheckCheckout_DivergedBranchIsRefusedBothWays(t *testing.T) {
+	work, remote := fixture(t)
+	commitFile(t, work, "local.txt")
+	advanceRemote(t, remote)
+
+	problems, _ := checkCheckout(context.Background(), work, checkOptions{refuseAhead: true})
+	require.Len(t, problems, 2)
+	assert.Contains(t, problems[0], "behind origin/master")
+	assert.Contains(t, problems[1], "ahead of origin/master")
+}
+
+func TestParseSymrefHead(t *testing.T) {
+	branch, tip := parseSymrefHead("ref: refs/heads/main\tHEAD\nabc123\tHEAD\n")
+	assert.Equal(t, "main", branch)
+	assert.Equal(t, "abc123", tip)
+
+	branch, tip = parseSymrefHead("")
+	assert.Empty(t, branch)
+	assert.Empty(t, tip)
+}
+
 func TestCheckCheckout_NotGit(t *testing.T) {
 	problems := CheckCheckout(context.Background(), t.TempDir())
 	require.Len(t, problems, 1)
@@ -314,7 +458,7 @@ func detach(t *testing.T, work string) {
 	require.NoError(t, runGit(work, "checkout", "--detach", "HEAD"))
 }
 
-func TestRunWith_DetachedHeadRefusedOutsideCI(t *testing.T) {
+func TestRunWith_DetachedHeadAtTheTipProceedsOutsideCI(t *testing.T) {
 	withCI(t, false)
 
 	work, _ := fixture(t)
@@ -322,17 +466,78 @@ func TestRunWith_DetachedHeadRefusedOutsideCI(t *testing.T) {
 
 	var ran []string
 
+	for _, action := range []Action{ActionExecute, ActionDestroy} {
+		require.NoError(t, RunWith(context.Background(), quiet(), gateConfig(work, &ran), action, nil, RunOptions{All: true}))
+	}
+
+	assert.Len(t, ran, 2)
+}
+
+func TestRunWith_DetachedHeadAtAnOlderCommitRefusedOutsideCI(t *testing.T) {
+	withCI(t, false)
+
+	work, remote := fixture(t)
+	detach(t, work)
+	advanceRemote(t, remote)
+
+	var ran []string
+
 	err := RunWith(context.Background(), quiet(), gateConfig(work, &ran), ActionExecute, nil, RunOptions{All: true})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no upstream")
+	assert.Contains(t, err.Error(), "HEAD is detached at")
+	assert.Contains(t, err.Error(), "git switch --detach origin/<default branch>")
 	assert.Empty(t, ran)
 }
 
-func TestRunWith_CIProceedsFromDetachedHeadAndWarns(t *testing.T) {
-	withCI(t, true)
+func TestRunWith_DetachedHeadAheadOfTheTipRefusedOutsideCI(t *testing.T) {
+	withCI(t, false)
 
 	work, _ := fixture(t)
 	detach(t, work)
+	commitFile(t, work, "local.txt")
+
+	var ran []string
+
+	err := RunWith(context.Background(), quiet(), gateConfig(work, &ran), ActionExecute, nil, RunOptions{All: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ahead of it, not published")
+	assert.Empty(t, ran)
+}
+
+func TestRunWith_OwnedStacksRefuseABranchAheadOfItsUpstream(t *testing.T) {
+	withCI(t, false)
+
+	work, _ := fixture(t)
+	commitFile(t, work, "local.txt")
+
+	var ran []string
+
+	cfg := gateConfig(work, &ran)
+
+	// Undeclared: ahead is the ordinary state of a change being tested.
+	require.NoError(t, RunWith(context.Background(), quiet(), cfg, ActionExecute, nil, RunOptions{All: true}))
+	assert.Len(t, ran, 1)
+
+	cfg.Scope = "gate"
+	cfg.Ownership = Ownership{Stacks: []string{"gate/*"}}
+
+	err := RunWith(context.Background(), quiet(), cfg, ActionExecute, nil, RunOptions{All: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "1 commit(s) ahead of origin/master")
+	assert.Len(t, ran, 1, "nothing ran")
+
+	// The override still covers it.
+	require.NoError(t, RunWith(context.Background(), quiet(), cfg, ActionExecute, nil,
+		RunOptions{All: true, AllowStaleCheckout: true}))
+	assert.Len(t, ran, 2)
+}
+
+func TestRunWith_CIProceedsFromDetachedHeadAtAnOlderCommitAndWarns(t *testing.T) {
+	withCI(t, true)
+
+	work, remote := fixture(t)
+	detach(t, work)
+	advanceRemote(t, remote)
 
 	var (
 		ran []string
@@ -349,6 +554,24 @@ func TestRunWith_CIProceedsFromDetachedHeadAndWarns(t *testing.T) {
 	assert.Contains(t, log.String(), "level=WARN")
 	assert.Contains(t, log.String(), "CHECKOUT CHECK SKIPPED (CI=true)")
 	assert.Contains(t, log.String(), "upstream comparison")
+}
+
+func TestRunWith_CIAtTheTipSkipsNothing(t *testing.T) {
+	withCI(t, true)
+
+	work, _ := fixture(t)
+	detach(t, work)
+
+	var (
+		ran []string
+		log strings.Builder
+	)
+
+	logger := slog.New(slog.NewTextHandler(&log, nil))
+
+	require.NoError(t, RunWith(context.Background(), logger, gateConfig(work, &ran), ActionExecute, nil, RunOptions{All: true}))
+	assert.Len(t, ran, 1)
+	assert.NotContains(t, log.String(), "CHECKOUT CHECK SKIPPED")
 }
 
 func TestRunWith_CIStillRefusesDirtyTree(t *testing.T) {

@@ -37,3 +37,14 @@ disables the gate entirely, including the check that does hold on a runner.
   and the flag it replaces bypassed more.
 - On a runner the gate no longer proves the commit is the tip of anything; that
   is the pipeline's job (what it checks out and when).
+
+## Amendment (v0.12.0)
+
+A detached HEAD is no longer "unverifiable" outside CI: the gate compares it
+with the tip of origin's default branch (fetch, then `git ls-remote --symref
+origin HEAD`, so a stale remote-tracking ref proves nothing) and accepts it
+when it is exactly that commit. Behind, ahead or diverged is refused. Under
+`CI=true` a detached HEAD at the tip passes silently, and one elsewhere is
+still skipped and logged as above. Separately, a repository that declares
+`owned_stacks` has a branch ahead of its upstream refused, because unpublished
+commits are in nobody's history; `--allow-stale-checkout` covers both.

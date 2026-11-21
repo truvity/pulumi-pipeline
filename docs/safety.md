@@ -9,9 +9,11 @@ away.
 ## The checkout gate
 
 **Refuses:** `deploy` and `destroy` from a checkout whose working tree has
-uncommitted or untracked paths, whose branch is behind its upstream, or
-whose state cannot be verified (not a git checkout, a detached HEAD, no
-upstream, a fetch that failed).
+uncommitted or untracked paths, whose branch is behind its upstream, whose
+detached HEAD is not the tip of origin's default branch, or whose state
+cannot be verified (not a git checkout, no upstream, a fetch that failed).
+In a repository that declares the stacks it owns, also a branch that is
+ahead of its upstream.
 
 **Why.** An apply is the one command whose result is not the output but
 the world. Run from a checkout that is ninety-nine commits behind, it
@@ -22,15 +24,34 @@ history.
 
 **How it decides.** It fetches the upstream's remote first. Comparing with
 an already-fetched remote-tracking ref proves nothing: the tree looks
-current right up to the moment someone asks the remote. Being *ahead* of the
-upstream is allowed — unpushed work is the ordinary state of a change being
-tested — and is not reported. `diff` and `refresh` are not gated: they show
-or reconcile state and do not put a program's reading of the world into it.
+current right up to the moment someone asks the remote.
+
+A **detached HEAD** has no upstream, so it is compared with the tip of
+origin's default branch instead: the gate fetches `origin`, asks the remote
+itself which branch is its default and where it points
+(`git ls-remote --symref origin HEAD`), and accepts HEAD when it is exactly
+that commit. This is what a fresh worktree at the fetched tip
+(`git worktree add --detach <dir> origin/master`) and a runner's checkout of
+the tip look like, so neither needs a branch or a `git switch` first. A
+detached HEAD at an older commit, ahead of the tip (unpublished) or diverged
+from it is refused, and the message says which.
+
+Being *ahead* of the upstream is allowed by default — unpushed work is the
+ordinary state of a change being tested — and is not reported. A repository
+that declares `owned_stacks` (`Ownership.Stacks`) has declared that what it
+applies is what it owns, so there a branch ahead of its upstream is refused
+too: commits nobody else can see are in nobody's history, and the world would
+converge on a program that cannot be reproduced. Push the commits (and merge
+them) first. `--allow-stale-checkout` covers this refusal like the others.
+
+`diff` and `refresh` are not gated: they show or reconcile state and do not
+put a program's reading of the world into it.
 
 **In CI.** With `CI=true` in the environment (the literal string `true`;
 every major CI system exports it) the gate skips the checks that cannot hold
-on a runner: a detached HEAD, which is how a runner checks out, has no
-upstream, so there is nothing to be "behind". Each skipped check is logged at
+on a runner: a detached HEAD that is not the tip of the default branch (a
+runner checks out the commit under test), or one whose tip cannot be asked.
+A detached HEAD that is the tip passes without a warning. Each skipped check is logged at
 WARN as `CHECKOUT CHECK SKIPPED (CI=true)`. Everything that still holds is
 still enforced: a dirty tree is refused, a checkout that is not a git
 checkout is refused, and a branch that *does* have an upstream (a runner that
