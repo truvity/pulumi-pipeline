@@ -50,8 +50,9 @@ A **gate** is a refusal the runner applies around your steps: on the
 checkout before a mutating run, on each step's clock, on a preview's
 result, and on the refresh-preview after an apply. Gates are on by default;
 the ones that can be overridden say so and log loudly when they are. The
-checkout gate relaxes on its own under `CI=true` (a runner's detached HEAD
-has no upstream) but still refuses a dirty tree; a local shell exporting
+checkout gate accepts a detached HEAD that is exactly the tip of origin's
+default branch, and relaxes on its own under `CI=true` (a runner's detached
+HEAD at the commit under test has no upstream) but still refuses a dirty tree; a local shell exporting
 `CI=true` bypasses the same checks ([safety](docs/safety.md#the-checkout-gate)).
 A repository that declares its origin and the stacks it owns in
 `.pulumi-pipeline.yaml` also gets two refusals with no override: a deploy

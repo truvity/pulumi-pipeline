@@ -5,6 +5,24 @@ Each hand-cut tag gets one heading.
 Entries are written for someone deciding whether to bump: what changed for
 them, and for anything breaking, what to do.
 
+## v0.12.0
+
+- `pkg/pipeline`: the checkout gate accepts a detached HEAD that is exactly
+  the tip of origin's default branch. It fetches `origin`, asks the remote
+  which branch is its default and where it points (`git ls-remote --symref
+  origin HEAD`) and compares; a fresh worktree at the fetched tip now deploys
+  without `git switch master && git merge --ff-only origin/master`. A
+  detached HEAD behind, ahead of or diverged from that tip is refused, and
+  the message says which. `CheckCheckout` follows. Under `CI=true` nothing is
+  skipped (or logged) for a detached HEAD at the tip, and a detached HEAD
+  elsewhere is skipped and logged as before.
+- `pkg/pipeline`: **behaviour change for repositories that declare
+  `Ownership.Stacks` (`owned_stacks:`).** `deploy` and `destroy` now refuse a
+  branch that is ahead of its upstream (unpublished commits), alongside the
+  existing refusal of one that is behind. Push (and merge) first, or pass
+  `--allow-stale-checkout`. Repositories that declare nothing keep allowing
+  a branch ahead of its upstream. The refusal's hint now names the way out.
+
 ## v0.11.0
 
 - `pkg/pipeline`: external inputs. A repository declares the files its

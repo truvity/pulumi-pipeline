@@ -132,9 +132,13 @@ var ciEnv = func() bool { return os.Getenv("CI") == "true" }
 // Under CI=true the checks that cannot hold on a runner are skipped, each
 // logged at WARN; a dirty tree is still refused. allow overrides everything,
 // as before.
-func requireFreshCheckout(ctx context.Context, logger *slog.Logger, root string, allow bool) error {
+//
+// A repository that declares the stacks it owns (own.Stacks) also has a
+// branch that is ahead of its upstream refused: unpublished commits are in
+// nobody's history, and what is applied from them cannot be reproduced.
+func requireFreshCheckout(ctx context.Context, logger *slog.Logger, root string, allow bool, own Ownership) error {
 	ci := ciEnv() && !allow
-	problems, skipped := checkCheckout(ctx, root, ci)
+	problems, skipped := checkCheckout(ctx, root, checkOptions{ci: ci, refuseAhead: len(own.Stacks) > 0})
 
 	for _, s := range skipped {
 		logger.WarnContext(ctx, "CHECKOUT CHECK SKIPPED (CI=true)", slog.String("skipped", s),
@@ -156,7 +160,9 @@ func requireFreshCheckout(ctx context.Context, logger *slog.Logger, root string,
 		return nil
 	}
 
-	hint := "fix the checkout, or override with --allow-stale-checkout if you mean it"
+	hint := "fix the checkout (git fetch, then either fast-forward the branch to its upstream " +
+		"or git switch --detach origin/<default branch>; push or drop unpublished commits), " +
+		"or override with --allow-stale-checkout if you mean it"
 	if ci {
 		hint = "CI=true relaxes only the upstream comparison; a dirty tree is still refused"
 	}
@@ -166,27 +172,45 @@ func requireFreshCheckout(ctx context.Context, logger *slog.Logger, root string,
 }
 
 // CheckCheckout reports why the checkout at root is not safe to apply from: a
-// dirty tree, a branch behind its upstream, or a state it cannot verify (no
-// git, no upstream, a fetch that failed). An empty result means it is clean
-// and level with, or ahead of, its upstream.
+// dirty tree, a branch behind its upstream, a detached HEAD that is not the
+// tip of the remote's default branch, or a state it cannot verify (no git, no
+// upstream, a fetch that failed). An empty result means it is clean and one
+// of: level with, or ahead of, its upstream; or detached exactly at the tip of
+// origin's default branch.
 //
 // It fetches the upstream's remote first, because "behind" against a stale
 // remote-tracking ref is exactly the mistake being guarded: the tree looks
 // current until someone asks the remote.
 func CheckCheckout(ctx context.Context, root string) []string {
-	problems, _ := checkCheckout(ctx, root, false)
+	problems, _ := checkCheckout(ctx, root, checkOptions{})
 
 	return problems
 }
 
-// checkCheckout is CheckCheckout with the CI relaxation. With ci set, a
-// checkout that has no upstream to compare with (a detached HEAD, which is how
-// a CI runner checks out; or an unpublished branch) is not a problem: the
-// upstream comparison is skipped and named in skipped instead. A dirty tree,
-// and anything that is not a git checkout, are refused either way. A branch
-// that does have an upstream is still compared, fetch and all: that check
-// holds in CI too.
-func checkCheckout(ctx context.Context, root string, ci bool) (problems, skipped []string) {
+// checkOptions tunes checkCheckout.
+type checkOptions struct {
+	// ci relaxes the upstream comparison for a checkout that has none and is
+	// not at the tip: see checkCheckout.
+	ci bool
+	// refuseAhead makes a branch with commits its upstream lacks a problem.
+	refuseAhead bool
+}
+
+// checkCheckout is CheckCheckout with the CI relaxation and the ahead refusal.
+//
+// A detached HEAD has no upstream to compare with, so it is compared with the
+// tip of the default branch of origin, asked of the remote itself: it passes
+// when HEAD is exactly that commit (a fresh worktree at the fetched tip, or a
+// runner that checked the tip out) and is refused when it is behind, ahead or
+// diverged. With ci set, a detached HEAD that is not at the tip, or whose tip
+// cannot be asked, is not a problem: the upstream comparison is skipped and
+// named in skipped instead (a runner checks out the commit under test). An
+// unpublished branch is treated the same way under ci. A dirty tree, and
+// anything that is not a git checkout, are refused either way. A branch that
+// does have an upstream is still compared, fetch and all: that check holds in
+// CI too.
+func checkCheckout(ctx context.Context, root string, opts checkOptions) (problems, skipped []string) {
+	ci := opts.ci
 
 	if _, err := git(ctx, root, "rev-parse", "--git-dir"); err != nil {
 		return []string{"not a git checkout, so it cannot be proven current"}, nil
@@ -200,6 +224,20 @@ func checkCheckout(ctx context.Context, root string, ci bool) (problems, skipped
 	}
 
 	upstream, err := git(ctx, root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+	if err != nil {
+		if _, symErr := git(ctx, root, "symbolic-ref", "--quiet", "HEAD"); symErr != nil {
+			// Detached: the comparison is with the default branch's tip.
+			problem := detachedProblem(ctx, root)
+			if problem == "" {
+				return problems, nil
+			}
+
+			if !ci {
+				return append(problems, problem), nil
+			}
+		}
+	}
+
 	if err != nil && ci {
 		return problems, []string{"upstream comparison (detached HEAD or no upstream branch; dirty-tree check still applied)"}
 	}
@@ -239,8 +277,10 @@ func checkCheckout(ctx context.Context, root string, ci bool) (problems, skipped
 		return append(problems, fmt.Sprintf("cannot parse the comparison with %s: %q", upstream, counts)), nil
 	}
 
-	behind, err := strconv.Atoi(fields[1])
-	if err != nil {
+	ahead, errA := strconv.Atoi(fields[0])
+	behind, errB := strconv.Atoi(fields[1])
+
+	if errA != nil || errB != nil {
 		return append(problems, fmt.Sprintf("cannot parse the comparison with %s: %q", upstream, counts)), nil
 	}
 
@@ -248,7 +288,102 @@ func checkCheckout(ctx context.Context, root string, ci bool) (problems, skipped
 		problems = append(problems, fmt.Sprintf("the branch is %d commit(s) behind %s", behind, upstream))
 	}
 
+	if ahead > 0 && opts.refuseAhead {
+		problems = append(problems, fmt.Sprintf(
+			"the branch is %d commit(s) ahead of %s: unpublished commits are in nobody's history; push them (and merge) first",
+			ahead, upstream))
+	}
+
 	return problems, nil
+}
+
+// detachedProblem is the comparison of a detached HEAD with the tip of the
+// default branch of origin. It fetches origin, then asks the remote itself
+// (git ls-remote --symref origin HEAD) which branch is the default and where
+// it points: a remote-tracking ref that has not moved proves nothing. It
+// returns "" when HEAD is exactly that commit.
+func detachedProblem(ctx context.Context, root string) string {
+	const remote = "origin"
+
+	if _, err := git(ctx, root, "remote", "get-url", remote); err != nil {
+		return "HEAD is detached and the checkout has no remote origin, so it cannot be compared with a default branch tip"
+	}
+
+	fetchCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
+	defer cancel()
+
+	if _, err := git(fetchCtx, root, "fetch", "--quiet", remote); err != nil {
+		return fmt.Sprintf("HEAD is detached and fetching %s failed, so currency cannot be proven: %v", remote, err)
+	}
+
+	out, err := git(fetchCtx, root, "ls-remote", "--symref", remote, "HEAD")
+	if err != nil {
+		return fmt.Sprintf("HEAD is detached and %s's default branch cannot be read: %v", remote, err)
+	}
+
+	branch, tip := parseSymrefHead(out)
+	if branch == "" || tip == "" {
+		return fmt.Sprintf("HEAD is detached and %s reports no default branch to compare with", remote)
+	}
+
+	headOut, err := git(ctx, root, "rev-parse", "HEAD")
+	if err != nil {
+		return fmt.Sprintf("HEAD is detached and cannot be read: %v", err)
+	}
+
+	head := strings.TrimSpace(headOut)
+	if head == tip {
+		return ""
+	}
+
+	name := remote + "/" + branch
+	at := fmt.Sprintf("HEAD is detached at %s, not at the tip of %s (%s)", short(head), name, short(tip))
+
+	counts, err := git(ctx, root, "rev-list", "--left-right", "--count", "HEAD..."+tip)
+	if err != nil {
+		return at
+	}
+
+	fields := strings.Fields(counts)
+	if len(fields) != 2 {
+		return at
+	}
+
+	switch ahead, behind := fields[0], fields[1]; {
+	case ahead == "0":
+		return fmt.Sprintf("%s: %s commit(s) behind it", at, behind)
+	case behind == "0":
+		return fmt.Sprintf("%s: %s commit(s) ahead of it, not published", at, ahead)
+	default:
+		return fmt.Sprintf("%s: diverged (%s ahead, %s behind)", at, ahead, behind)
+	}
+}
+
+// parseSymrefHead reads `git ls-remote --symref <remote> HEAD`: the default
+// branch name ("master") and the commit it points to.
+func parseSymrefHead(out string) (branch, tip string) {
+	for _, l := range nonEmptyLines(out) {
+		if rest, ok := strings.CutPrefix(l, "ref: refs/heads/"); ok {
+			branch, _, _ = strings.Cut(rest, "\t")
+			branch = strings.TrimSpace(branch)
+
+			continue
+		}
+
+		if sha, ref, ok := strings.Cut(l, "\t"); ok && strings.TrimSpace(ref) == "HEAD" {
+			tip = strings.TrimSpace(sha)
+		}
+	}
+
+	return branch, tip
+}
+
+func short(sha string) string {
+	if len(sha) > 12 {
+		return sha[:12]
+	}
+
+	return sha
 }
 
 // git runs one git command in dir and returns its stdout. Prompts are off: a

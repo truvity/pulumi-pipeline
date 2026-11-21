@@ -88,8 +88,11 @@ func Run(
 //     warns, and refuses with ExpectNoChanges; destroy and refresh are not
 //     gated. Each input is hashed again before every deploy step. Nothing
 //     overrides a digest mismatch; AllowStaleInputs covers age only.
-//   - Deploy and destroy refuse a dirty checkout or one behind its upstream
-//     (CheckCheckout) unless AllowStaleCheckout says otherwise.
+//   - Deploy and destroy refuse a dirty checkout, one behind its upstream, or
+//     a detached HEAD that is not the tip of origin's default branch
+//     (CheckCheckout), unless AllowStaleCheckout says otherwise. A repository
+//     that declares cfg.Ownership.Stacks also has a branch ahead of its
+//     upstream (unpublished commits) refused.
 //   - Every step runs under StepTimeout.
 //   - With ExpectNoChanges, a dry-run step that reports any change fails.
 func RunWith(
@@ -146,7 +149,7 @@ func RunWith(
 	}
 
 	if mutating {
-		if err := requireFreshCheckout(ctx, logger, repoRoot, opts.AllowStaleCheckout); err != nil {
+		if err := requireFreshCheckout(ctx, logger, repoRoot, opts.AllowStaleCheckout, cfg.Ownership); err != nil {
 			return err
 		}
 	}

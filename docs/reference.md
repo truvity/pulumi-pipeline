@@ -52,12 +52,12 @@ exits 1 if any failed.
 | --- | --- |
 | `--all`, `--exclusive`, `-e` | As above. |
 | `--step-timeout D` | Per-step clock. |
-| `--allow-stale-checkout` | (`deploy`, `destroy`, `refresh`; only the first two are gated.) Proceed although the checkout is dirty, behind its upstream or unverifiable. Each reason is logged at WARN. It does not cover the origin check, stack ownership or external inputs. |
+| `--allow-stale-checkout` | (`deploy`, `destroy`, `refresh`; only the first two are gated.) Proceed although the checkout is dirty, behind its upstream, ahead of it (when the repository declares `owned_stacks`), detached away from the default branch's tip or unverifiable. Each reason is logged at WARN. It does not cover the origin check, stack ownership or external inputs. |
 | `--allow-stale-inputs` | (`deploy` only.) Proceed although an external input was published longer ago than its `max_age`. Each waived problem is logged at WARN. It waives age and nothing else: a digest mismatch, a missing file, a failed lookup and a missing resolver are still refused. |
 
 Environment: `CI=true` relaxes the checkout gate without the flag, skipping
-only the upstream comparison (detached HEAD or no upstream) and logging each
-skipped check at WARN; a dirty tree is still refused. A local shell that
+only the upstream comparison (a detached HEAD that is not the default
+branch's tip, or no upstream) and logging each skipped check at WARN; a dirty tree is still refused. A local shell that
 exports `CI=true` bypasses the same checks. See
 [safety](safety.md#the-checkout-gate).
 
